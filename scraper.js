@@ -24,11 +24,14 @@ async function runScraper() {
   timeout: 60000,
   waitUntil: 'domcontentloaded'
    });
-   await page.waitForSelector('button:has-text("Accetta")', { timeout: 15000 });
-   await page.click('button:has-text("Accetta")');
+   try {
+  await page.waitForSelector('text=Accetta', { timeout: 20000 });
+  await page.click('text=Accetta');
+  console.log("✅ Cookie accettati");
+  } catch (err) {
+  console.log("⚠️ Nessun popup cookie trovato, continuo...");
+  }
 
-  // Accetta i cookie (clicca sul pulsante "Accetta")
-  await page.locator('button:has-text("Accetta")').click();
   const listings = await page.$$eval('a.AdCard-module_link__Dq1UD', links =>
     links.map(link => ({
       titolo: link.querySelector('h2')?.innerText || 'N/A',
