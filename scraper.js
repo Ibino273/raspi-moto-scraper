@@ -24,7 +24,9 @@ async function runScraper() {
   timeout: 60000,
   waitUntil: 'domcontentloaded'
    });
-   await page.click('button[aria-label="Accetta"]');
+   await page.waitForSelector('button:has-text("Accetta")', { timeout: 15000 });
+   await page.click('button:has-text("Accetta")');
+
   // Accetta i cookie (clicca sul pulsante "Accetta")
   await page.locator('button:has-text("Accetta")').click();
   const listings = await page.$$eval('a.AdCard-module_link__Dq1UD', links =>
