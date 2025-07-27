@@ -11,8 +11,9 @@ const userAgents = [
 
 async function runScraper() {
   const browser = await chromium.launch({
-  headless: true,
-  executablePath: '/usr/bin/chromium-browser'
+ headless: false,  // <--- cambia da true a false
+  executablePath: '/usr/bin/chromium-browser',
+  slowMo: 100        // per rallentare e vedere meglio
 });
 
   const context = await browser.newContext({
