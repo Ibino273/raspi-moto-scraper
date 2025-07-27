@@ -1,3 +1,4 @@
+// scraper.js
 require('dotenv').config();
 const { chromium } = require('playwright');
 const fetch = require('node-fetch');
@@ -11,58 +12,47 @@ const userAgents = [
 
 async function runScraper() {
   const browser = await chromium.launch({
- headless: false,  // <--- cambia da true a false
-  executablePath: '/usr/bin/chromium-browser',
+    headless: false,
+    executablePath: '/usr/bin/chromium-browser',
     args: ['--start-fullscreen']
-});
-  const context = await browser.newContext({
-  viewport: { width: 1920, height: 1080 }, // usa la dimensione nativa
-  userAgent: userAgents[Math.floor(Math.random() * userAgents.length)]
-});
-
-
-  const context = await browser.newContext({
-    userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
   });
+
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    userAgent: userAgents[Math.floor(Math.random() * userAgents.length)]
+  });
+
   const page = await context.newPage();
   console.log("🔍 Apro Subito.it");
   await page.goto('https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/', {
-  timeout: 60000,
-  waitUntil: 'domcontentloaded'
-   });
-  try {
-  // Aspetta fino a 7 secondi il pulsante "Accetta"
-  await page.waitForSelector('button:has-text("Accetta")', { timeout: 7000 });
-  await page.click('button:has-text("Accetta")');
-  console.log("✅ Cookie accettati");
-} catch (err1) {
-  console.log("⚠️ 'Accetta' non trovato, provo con 'Continua senza accettare'...");
-  try {
-    // Se "Accetta" non è presente, prova con "Continua senza accettare"
-    await page.waitForSelector('text=Continua senza accettare', { timeout: 5000 });
-    await page.click('text=Continua senza accettare');
-    console.log("✅ Cookie rifiutati");
-  } catch (err2) {
-    console.log("⚠️ Nessun pulsante cookie cliccabile trovato, continuo lo scraping...");
-  }
-}
+    timeout: 60000,
+    waitUntil: 'domcontentloaded'
+  });
 
-   try {
-  await page.waitForSelector('text=Accetta', { timeout: 50000 });
-  await page.click('text=Accetta');
-  console.log("✅ Cookie accettati");
-  } catch (err) {
-  console.log("⚠️ Nessun popup cookie trovato, continuo...");
+  try {
+    await page.waitForSelector('button:has-text("Accetta")', { timeout: 7000 });
+    await page.click('button:has-text("Accetta")');
+    console.log("✅ Cookie accettati");
+  } catch (err1) {
+    console.log("⚠️ 'Accetta' non trovato, provo con 'Continua senza accettare'...");
+    try {
+      await page.waitForSelector('text=Continua senza accettare', { timeout: 5000 });
+      await page.click('text=Continua senza accettare');
+      console.log("✅ Cookie rifiutati");
+    } catch (err2) {
+      console.log("⚠️ Nessun pulsante cookie cliccabile trovato, continuo lo scraping...");
+    }
   }
 
   const listings = await page.$$eval('a.AdCard-module_link__Dq1UD', links =>
     links.map(link => ({
       titolo: link.querySelector('h2')?.innerText || 'N/A',
       link: link.href,
-      prezzo: link.innerText.match(/€[\d\.]+/)?.[0] || 'N/A',
+      prezzo: link.innerText.match(/\u20ac[\d\.]+/)?.[0] || 'N/A',
       luogo: link.innerText.match(/[\w ]+, \d{2}\/\d{2}/)?.[0] || 'N/A',
     }))
   );
+
   await browser.close();
   console.log("📦 Numero annunci trovati:", listings.length);
 
