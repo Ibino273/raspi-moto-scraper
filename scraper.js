@@ -86,31 +86,30 @@ async function runScraperDebug() {
 
     console.log("--- Tentativo di estrazione annunci dalla pagina principale ---");
 
-    // Estrai tutti i contenitori degli annunci
-    const listingContainers = await page.$$('li[data-testid="listing-container"]');
-    console.log(`🔍 Trovati ${listingContainers.length} contenitori di annunci con 'li[data-testid="listing-container"]'.`);
+    // Estrai tutti i link degli annunci utilizzando il selettore fornito
+    const listingLinks = await page.$$('div:nth-of-type(3) a.SmallCard-module_link__hOkzY');
+    console.log(`🔍 Trovati ${listingLinks.length} link di annunci con 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY'.`);
 
-    if (listingContainers.length === 0) {
-      console.error("❌ Nessun contenitore di annuncio trovato. Il selettore 'li[data-testid=\"listing-container\"]' potrebbe essere sbagliato o la pagina è vuota.");
+    if (listingLinks.length === 0) {
+      console.error("❌ Nessun link di annuncio trovato. Il selettore 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' potrebbe essere sbagliato o la pagina è vuota.");
     } else {
       // Prova a estrarre i dettagli dal primo annuncio per debug
-      const firstItem = listingContainers[0];
+      const firstLinkElement = listingLinks[0]; // Ora firstLinkElement è direttamente l'elemento <a>
+      const fullUrl = await firstLinkElement?.getAttribute('href');
       console.log("\n--- Dettagli del PRIMO annuncio trovato ---");
+      console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
 
       try {
-        const linkElement = await firstItem.$('a[href*="/annunci/"]');
-        const fullUrl = await linkElement?.getAttribute('href');
-        console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
-
-        const titoloElement = await firstItem.$('h2.SmallCardModule_item-data__title');
+        // I selettori per titolo, prezzo e immagine sono ora relativi al link stesso
+        const titoloElement = await firstLinkElement.$('h2.SmallCardModule_item-data__title');
         const titolo = (await titoloElement?.textContent())?.trim();
         console.log(`Titolo: ${titolo || 'N/A'}`);
 
-        const prezzoElement = await firstItem.$('div.SmallCardModule_item-data__price span');
+        const prezzoElement = await firstLinkElement.$('div.SmallCardModule_item-data__price span');
         const prezzoText = (await prezzoElement?.textContent())?.trim();
         console.log(`Prezzo: ${prezzoText || 'N/A'}`);
 
-        const imgElement = await firstItem.$('img.SmallCardModule_picture__image');
+        const imgElement = await firstLinkElement.$('img.SmallCardModule_picture__image');
         const immagine_url = await imgElement?.getAttribute('src');
         console.log(`URL Immagine: ${immagine_url || 'N/A'}`);
 
