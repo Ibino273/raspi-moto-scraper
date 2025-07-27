@@ -10,7 +10,11 @@ const userAgents = [
 ];
 
 async function runScraper() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+  headless: true,
+  executablePath: '/usr/bin/chromium-browser'
+});
+
   const context = await browser.newContext({
     userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
   });
