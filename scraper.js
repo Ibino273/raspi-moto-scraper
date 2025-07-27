@@ -20,8 +20,11 @@ async function runScraper() {
   });
   const page = await context.newPage();
   console.log("🔍 Apro Subito.it");
-  await page.screenshot({ path: 'pagina_subito.png', fullPage: true });
-  await page.goto('https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/');
+  await page.goto('https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/', {
+  timeout: 60000,
+  waitUntil: 'domcontentloaded'
+   });
+   await page.click('button[aria-label="Accetta"]');
   // Accetta i cookie (clicca sul pulsante "Accetta")
   await page.locator('button:has-text("Accetta")').click();
   const listings = await page.$$eval('a.AdCard-module_link__Dq1UD', links =>
