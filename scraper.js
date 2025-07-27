@@ -13,6 +13,7 @@ async function runScraper() {
   const browser = await chromium.launch({
  headless: false,  // <--- cambia da true a false
   executablePath: '/usr/bin/chromium-browser',
+    args: ['--start-fullscreen']
 });
 
   const context = await browser.newContext({
