@@ -1,7 +1,7 @@
 // scraper.js
 require('dotenv').config();
 const { chromium } = require('playwright');
-const fetch = require('node-fetch');
+const fetch = require('node-fetch'); // Assicurati che node-fetch sia installato: npm install node-fetch
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_API_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -43,6 +43,9 @@ async function runScraper() {
   const BASE_URL = 'https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/';
   let pageNumber = 1;
   const maxPagesToScrape = 5; // Limite massimo di pagine da scansionare per evitare cicli infiniti
+
+  let nuoviAnnunci = 0;
+  let annunciAggiornati = 0;
 
   try {
     // Avvia il browser Chromium con le tue configurazioni specifiche
@@ -88,49 +91,71 @@ async function runScraper() {
         }
       }
 
-      // Estrai gli annunci con selezione più robusta
-      // Cerca tutti i link che contengono "/annunci-" nel loro href, che è più stabile.
-      const listings = await page.$$eval('a[href*="/annunci-"]', links =>
-        links.map(link => {
-          const titleElement = link.querySelector('h2');
-          const priceMatch = link.innerText.match(/€[\d\.]+/); // Mantenuto il tuo regex per il prezzo
-          const locationMatch = link.innerText.match(/[\w ]+, \d{2}\/\d{2}/);
+      // Estrai gli annunci utilizzando i selettori più robusti dallo script Deno
+      const listings = await page.$$eval('li[data-testid="listing-container"]', items =>
+        items.map(item => {
+          // Estrai l'elemento del link principale e il suo href
+          const linkElement = item.querySelector('a[href*="/annunci/"]');
+          const relativeUrl = linkElement?.getAttribute('href');
+          let subito_id = null;
+          let fullUrl = null;
 
-          // Filtra i link che non sembrano essere annunci validi (es. link generici del sito)
-          if (!titleElement || !priceMatch) {
-            return null; // Ritorna null per i link non validi, verranno filtrati dopo
+          if (relativeUrl) {
+            // Estrai subito_id dall'URL (es. /annunci/provincia/categoria/id.htm)
+            const urlParts = relativeUrl.split('/');
+            subito_id = urlParts[urlParts.length - 1]?.replace('.htm', '');
+            fullUrl = `https://www.subito.it${relativeUrl}`; // Costruisce l'URL completo
           }
 
-          // Normalizzazione del prezzo: rimuove il simbolo dell'euro e i punti, poi converte in float
-          const prezzoNormalizzato = parseFloat(priceMatch[0].replace(/€|\./g, '').replace(',', '.'));
+          // Estrai il titolo usando il selettore specifico
+          const titoloElement = item.querySelector('h2.SmallCardModule_item-data__title');
+          const titolo = titoloElement?.textContent?.trim() || 'Senza titolo';
 
-          // Estrazione e normalizzazione di città e data dal luogo
-          let citta = 'N/A';
-          let dataAnnuncio = null;
-          if (locationMatch) {
-            const parts = locationMatch[0].split(', ');
-            if (parts.length >= 1) {
-              citta = parts[0].trim();
+          // Estrai il prezzo usando il selettore specifico
+          const prezzoElement = item.querySelector('div.SmallCardModule_item-data__price span');
+          let prezzo = null;
+          if (prezzoElement) {
+            const prezzoText = prezzoElement.textContent?.trim();
+            if (prezzoText) {
+              // Pulisce il testo del prezzo: rimuove il simbolo di valuta, gli spazi e sostituisce la virgola con il punto per il parsing
+              const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(',', '.');
+              prezzo = parseFloat(cleanedPrice);
             }
-            if (parts.length >= 2) {
-              const dateParts = parts[1].split('/');
-              if (dateParts.length === 2) {
-                const day = parseInt(dateParts[0]);
-                const month = parseInt(dateParts[1]);
-                const currentYear = new Date().getFullYear();
-                dataAnnuncio = new Date(currentYear, month - 1, day).toISOString().split('T')[0]; // Formato YYYY-MM-DD
+          }
+
+          // Estrai l'URL dell'immagine usando il selettore specifico
+          const imgElement = item.querySelector('img.SmallCardModule_picture__image');
+          const immagine_url = imgElement?.getAttribute('src') || null;
+
+          // Estrai marca e modello usando regex sul titolo (logica esistente, generalmente robusta per questo)
+          const brands = ['Yamaha', 'Honda', 'Ducati', 'BMW', 'Kawasaki', 'Suzuki', 'Aprilia', 'KTM', 'Harley', 'Vespa', 'Piaggio', 'Gilera', 'Benelli', 'MV Agusta', 'Triumph', 'Moto Guzzi'];
+          const marcaMatch = brands.find(b => titolo.toLowerCase().includes(b.toLowerCase()));
+          const marca = marcaMatch || null;
+          let modello = null;
+          if (marca && titolo) {
+              const tempTitle = titolo.replace(new RegExp(marca, 'i'), '').trim();
+              const modelloParts = tempTitle.split(' ');
+              if (modelloParts.length > 0) {
+                  modello = modelloParts[0];
               }
-            }
           }
 
-          return {
-            titolo: titleElement.innerText.trim(),
-            link: link.href,
-            prezzo: prezzoNormalizzato,
-            citta: citta,
-            data_annuncio: dataAnnuncio,
-            data_scraping: new Date().toISOString() // Aggiunge la data di scraping
-          };
+          // Aggiungi l'annuncio parsato all'elenco se i dati essenziali sono presenti
+          if (subito_id && titolo && fullUrl) {
+            return {
+              subito_id,
+              titolo,
+              url: fullUrl,
+              prezzo,
+              immagine_url,
+              marca,
+              modello,
+              data_scraping: new Date().toISOString() // Aggiunge la data di scraping
+            };
+          } else {
+              console.warn(`Saltando annuncio incompleto. ID: ${subito_id}, Titolo: ${titolo}, URL: ${fullUrl}`);
+              return null;
+          }
         }).filter(item => item !== null) // Filtra gli elementi nulli (link non validi)
       );
 
@@ -142,31 +167,65 @@ async function runScraper() {
       console.log(`🔍 Trovati ${listings.length} annunci sulla pagina ${pageNumber}.`);
       totalListingsScraped += listings.length;
 
-      // Inserisci gli annunci in Supabase con logica di retry
+      // Inserisci/Aggiorna gli annunci in Supabase con logica esplicita (come nello script Deno)
       for (const annuncio of listings) {
-        console.log(`⏳ Tentativo di inserimento: ${annuncio.titolo}`);
+        console.log(`⏳ Elaborazione annuncio: ${annuncio.titolo}`);
         try {
           await withRetry(async () => {
-            const res = await fetch(`${SUPABASE_URL}/rest/v1/moto_listings`, {
-              method: 'POST',
+            // Controlla se l'annuncio esiste già in Supabase
+            const check = await fetch(`${SUPABASE_URL}/rest/v1/moto_listings?subito_id=eq.${annuncio.subito_id}&select=id`, {
               headers: {
-                apikey: SUPABASE_API_KEY,
-                Authorization: `Bearer ${SUPABASE_API_KEY}`,
-                'Content-Type': 'application/json',
-                Prefer: 'resolution=merge-duplicates' // Aggiorna se esiste già un record con la stessa chiave primaria
-              },
-              body: JSON.stringify([annuncio])
+                'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+                'apikey': SUPABASE_API_KEY,
+                'Content-Type': 'application/json'
+              }
             });
+            const existing = await check.json();
 
-            if (!res.ok) {
-              const errorText = await res.text();
-              throw new Error(`Errore Supabase (${res.status}): ${errorText}`);
+            // Dati dell'annuncio da inserire/aggiornare
+            const annuncioData = {
+                ...annuncio,
+                data_scraping: new Date().toISOString() // Aggiorna il timestamp di scraping
+            };
+
+            if (existing.length > 0) {
+              // Se esiste, aggiorna il record
+              const update = await fetch(`${SUPABASE_URL}/rest/v1/moto_listings?subito_id=eq.${annuncio.subito_id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+                  'apikey': SUPABASE_API_KEY,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(annuncioData)
+              });
+              if (update.ok) {
+                annunciAggiornati++;
+                console.log(`✅ Aggiornato: ${annuncio.titolo}`);
+              } else {
+                console.error(`❌ Errore nell'aggiornamento dell'annuncio ${annuncio.subito_id}:`, await update.text());
+              }
             } else {
-              console.log(`✅ Inserito con successo: ${annuncio.titolo}`);
+              // Se non esiste, inserisci un nuovo record
+              const insert = await fetch(`${SUPABASE_URL}/rest/v1/moto_listings`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+                  'apikey': SUPABASE_API_KEY,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(annuncioData)
+              });
+              if (insert.ok) {
+                nuoviAnnunci++;
+                console.log(`✅ Inserito: ${annuncio.titolo}`);
+              } else {
+                console.error(`❌ Errore nell'inserimento dell'annuncio ${annuncio.subito_id}:`, await insert.text());
+              }
             }
-          }, 5, 2000); // 5 tentativi, ritardo iniziale di 2 secondi
+          }, 5, 2000); // 5 tentativi, ritardo iniziale di 2 secondi per le operazioni Supabase
         } catch (fetchErr) {
-          console.error(`❌ Fallimento definitivo per "${annuncio.titolo}":`, fetchErr.message);
+          console.error(`❌ Fallimento definitivo operazione Supabase per "${annuncio.titolo}":`, fetchErr.message);
           // Qui si potrebbe aggiungere una logica per inviare notifiche (es. email/Slack)
         }
         // Aggiungi un ritardo casuale tra le richieste a Supabase per evitare sovraccarichi
@@ -179,6 +238,8 @@ async function runScraper() {
     }
 
     console.log(`🎉 Scraping completato. Totale annunci scansionati: ${totalListingsScraped}`);
+    console.log(`📊 Nuovi annunci inseriti: ${nuoviAnnunci}`);
+    console.log(`📊 Annunci aggiornati: ${annunciAggiornati}`);
 
   } catch (err) {
     console.error('❌ Errore critico nello scraper:', err.message);
