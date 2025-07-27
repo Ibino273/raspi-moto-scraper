@@ -120,20 +120,23 @@ async function runScraperDebug() {
             await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
             console.log(`✅ Pagina dettaglio caricata per: ${titolo}`);
 
-            // Estrazione dati dalla pagina di dettaglio
+            // Estrazione dati dalla pagina di dettaglio con i nuovi selettori
             const descrizioneElement = await detailPage.$('p.AdDescription-module_description__E54FP');
             const descrizione = (await descrizioneElement?.textContent())?.trim();
             console.log(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
 
-            const likesElement = await detailPage.$('span.Heart-module_counter-wrapper__N1thb');
+            // Nuovo selettore per Likes
+            const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
             const likes = (await likesElement?.textContent())?.trim();
             console.log(`Likes: ${likes || 'N/A'}`);
 
-            const marcaElement = await detailPage.$('div:nth-of-type(1) span.feature-list__value__SZDq2');
+            // Nuovo selettore per Marca
+            const marcaElement = await detailPage.$('li:nth-of-type(1) span.feature-list_value__SZDpz');
             const marca = (await marcaElement?.textContent())?.trim();
             console.log(`Marca (dettaglio): ${marca || 'N/A'}`);
 
-            const modelloElement = await detailPage.$('div:nth-of-type(2) span.feature-list__value__SZDq2');
+            // Nuovo selettore per Modello
+            const modelloElement = await detailPage.$('li:nth-of-type(2) span.feature-list_value__SZDpz');
             const modello = (await modelloElement?.textContent())?.trim();
             console.log(`Modello (dettaglio): ${modello || 'N/A'}`);
 
