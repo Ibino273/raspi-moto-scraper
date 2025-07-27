@@ -13,7 +13,6 @@ async function runScraper() {
   const browser = await chromium.launch({
  headless: false,  // <--- cambia da true a false
   executablePath: '/usr/bin/chromium-browser',
-  slowMo: 100        // per rallentare e vedere meglio
 });
 
   const context = await browser.newContext({
@@ -23,6 +22,8 @@ async function runScraper() {
   console.log("🔍 Apro Subito.it");
   await page.screenshot({ path: 'pagina_subito.png', fullPage: true });
   await page.goto('https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/');
+  // Accetta i cookie (clicca sul pulsante "Accetta")
+  await page.locator('button:has-text("Accetta")').click();
   const listings = await page.$$eval('a.AdCard-module_link__Dq1UD', links =>
     links.map(link => ({
       titolo: link.querySelector('h2')?.innerText || 'N/A',
