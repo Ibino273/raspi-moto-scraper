@@ -127,18 +127,9 @@ async function runScraper() {
           const imgElement = item.querySelector('img.SmallCardModule_picture__image');
           const immagine_url = imgElement?.getAttribute('src') || null;
 
-          // Estrai marca e modello usando regex sul titolo (logica esistente, generalmente robusta per questo)
-          const brands = ['Yamaha', 'Honda', 'Ducati', 'BMW', 'Kawasaki', 'Suzuki', 'Aprilia', 'KTM', 'Harley', 'Vespa', 'Piaggio', 'Gilera', 'Benelli', 'MV Agusta', 'Triumph', 'Moto Guzzi'];
-          const marcaMatch = brands.find(b => titolo.toLowerCase().includes(b.toLowerCase()));
-          const marca = marcaMatch || null;
+          // Inizializza marca e modello a null; verranno sovrascritti dalla pagina di dettaglio se trovati
+          let marca = null;
           let modello = null;
-          if (marca && titolo) {
-              const tempTitle = titolo.replace(new RegExp(marca, 'i'), '').trim();
-              const modelloParts = tempTitle.split(' ');
-              if (modelloParts.length > 0) {
-                  modello = modelloParts[0];
-              }
-          }
 
           // Aggiungi l'annuncio parsato all'elenco se i dati essenziali sono presenti
           if (subito_id && titolo && fullUrl) {
@@ -148,8 +139,10 @@ async function runScraper() {
               url: fullUrl,
               prezzo,
               immagine_url,
-              marca,
-              modello,
+              marca, // Sarà aggiornato dalla pagina di dettaglio
+              modello, // Sarà aggiornato dalla pagina di dettaglio
+              descrizione: null, // Sarà aggiornato dalla pagina di dettaglio
+              likes: null, // Sarà aggiornato dalla pagina di dettaglio
               data_scraping: new Date().toISOString() // Aggiunge la data di scraping
             };
           } else {
@@ -170,6 +163,45 @@ async function runScraper() {
       // Inserisci/Aggiorna gli annunci in Supabase con logica esplicita (come nello script Deno)
       for (const annuncio of listings) {
         console.log(`⏳ Elaborazione annuncio: ${annuncio.titolo}`);
+        let detailPage;
+        try {
+          // Apre una nuova pagina per visitare il dettaglio dell'annuncio
+          detailPage = await context.newPage();
+          console.log(`🌐 Navigazione alla pagina dettaglio: ${annuncio.url}`);
+          await withRetry(() => detailPage.goto(annuncio.url, { waitUntil: 'domcontentloaded', timeout: 60000 }), 3, 5000);
+          console.log(`✅ Pagina dettaglio caricata per: ${annuncio.titolo}`);
+
+          // --- Estrazione dati dalla pagina di dettaglio ---
+          // Descrizione
+          const descrizioneElement = await detailPage.$('p.AdDescription-module_description__E54FP');
+          annuncio.descrizione = (await descrizioneElement?.textContent())?.trim() || null;
+
+          // Likes (se presente)
+          const likesElement = await detailPage.$('span.Heart-module_counter-wrapper__N1thb');
+          annuncio.likes = parseInt((await likesElement?.textContent())?.trim()) || 0; // Converte in numero, 0 se non trovato
+
+          // Marca e Modello dai selettori specifici forniti
+          // Attenzione: questi selettori (nth-of-type e classi dinamiche) potrebbero essere fragili.
+          // La loro robustezza dipende dalla stabilità della struttura HTML del sito.
+          const marcaElement = await detailPage.$('div:nth-of-type(1) span.feature-list__value__SZDq2');
+          annuncio.marca = (await marcaElement?.textContent())?.trim() || annuncio.marca; // Sovrascrive o mantiene il valore esistente
+
+          const modelloElement = await detailPage.$('div:nth-of-type(2) span.feature-list__value__SZDq2');
+          annuncio.modello = (await modelloElement?.textContent())?.trim() || annuncio.modello; // Sovrascrive o mantiene il valore esistente
+
+          // Aggiungi un piccolo ritardo dopo aver estratto i dati dalla pagina di dettaglio
+          await detailPage.waitForTimeout(getRandomDelay(200, 1000));
+
+        } catch (detailPageError) {
+          console.error(`❌ Errore durante lo scraping della pagina dettaglio per "${annuncio.titolo}":`, detailPageError.message);
+          // Continua con il prossimo annuncio anche se lo scraping della pagina di dettaglio fallisce
+        } finally {
+          if (detailPage) {
+            await detailPage.close(); // Chiude la pagina di dettaglio dopo l'elaborazione
+          }
+        }
+
+        // --- Inserisci/Aggiorna in Supabase ---
         try {
           await withRetry(async () => {
             // Controlla se l'annuncio esiste già in Supabase
