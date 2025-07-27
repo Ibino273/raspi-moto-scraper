@@ -15,6 +15,11 @@ async function runScraper() {
   executablePath: '/usr/bin/chromium-browser',
     args: ['--start-fullscreen']
 });
+  const context = await browser.newContext({
+  viewport: viewport: { width: 1920, height: 1080 }, // usa la dimensione nativa
+  userAgent: userAgents[Math.floor(Math.random() * userAgents.length)]
+});
+
 
   const context = await browser.newContext({
     userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
@@ -25,8 +30,25 @@ async function runScraper() {
   timeout: 60000,
   waitUntil: 'domcontentloaded'
    });
+  try {
+  // Aspetta fino a 7 secondi il pulsante "Accetta"
+  await page.waitForSelector('button:has-text("Accetta")', { timeout: 7000 });
+  await page.click('button:has-text("Accetta")');
+  console.log("✅ Cookie accettati");
+} catch (err1) {
+  console.log("⚠️ 'Accetta' non trovato, provo con 'Continua senza accettare'...");
+  try {
+    // Se "Accetta" non è presente, prova con "Continua senza accettare"
+    await page.waitForSelector('text=Continua senza accettare', { timeout: 5000 });
+    await page.click('text=Continua senza accettare');
+    console.log("✅ Cookie rifiutati");
+  } catch (err2) {
+    console.log("⚠️ Nessun pulsante cookie cliccabile trovato, continuo lo scraping...");
+  }
+}
+
    try {
-  await page.waitForSelector('text=Accetta', { timeout: 20000 });
+  await page.waitForSelector('text=Accetta', { timeout: 50000 });
   await page.click('text=Accetta');
   console.log("✅ Cookie accettati");
   } catch (err) {
