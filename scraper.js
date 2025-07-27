@@ -16,7 +16,7 @@ async function runScraper() {
     args: ['--start-fullscreen']
 });
   const context = await browser.newContext({
-  viewport: viewport: { width: 1920, height: 1080 }, // usa la dimensione nativa
+  viewport: { width: 1920, height: 1080 }, // usa la dimensione nativa
   userAgent: userAgents[Math.floor(Math.random() * userAgents.length)]
 });
 
