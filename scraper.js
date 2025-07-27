@@ -107,7 +107,14 @@ async function runScraperDebug() {
 
         const prezzoElement = await firstLinkElement.$('div.SmallCardModule_item-data__price span');
         const prezzoText = (await prezzoElement?.textContent())?.trim();
-        console.log(`Prezzo: ${prezzoText || 'N/A'}`);
+        
+        // CORREZIONE: Gestione del prezzo per formato italiano (es. 3.490 -> 3490)
+        let prezzoParsed = null;
+        if (prezzoText) {
+            const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.'); // Rimuove punti e poi sostituisce virgola con punto
+            prezzoParsed = parseFloat(cleanedPrice);
+        }
+        console.log(`Prezzo (pagina principale): ${prezzoParsed || 'N/A'}`);
 
         const imgElement = await firstLinkElement.$('img.SmallCardModule_picture__image');
         const immagine_url = await imgElement?.getAttribute('src');
@@ -140,8 +147,14 @@ async function runScraperDebug() {
 
             const prezzoDettaglioElement = await detailPage.$('p.AdInfo_price__flXgp');
             const prezzoDettaglioText = (await prezzoDettaglioElement?.textContent())?.trim();
-            const prezzoDettaglio = prezzoDettaglioText ? parseFloat(prezzoDettaglioText.replace(/€|\s/g, '').replace(',', '.')) : null;
-            console.log(`Prezzo (dettaglio): ${prezzoDettaglio || 'N/A'}`);
+            
+            // CORREZIONE: Gestione del prezzo per formato italiano anche per il dettaglio
+            let prezzoDettaglioParsed = null;
+            if (prezzoDettaglioText) {
+                const cleanedPriceDettaglio = prezzoDettaglioText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
+                prezzoDettaglioParsed = parseFloat(cleanedPriceDettaglio);
+            }
+            console.log(`Prezzo (dettaglio): ${prezzoDettaglioParsed || 'N/A'}`);
 
             const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
             const nome = (await nomeElement?.textContent())?.trim();
