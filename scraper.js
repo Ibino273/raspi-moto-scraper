@@ -120,25 +120,56 @@ async function runScraperDebug() {
             await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
             console.log(`✅ Pagina dettaglio caricata per: ${titolo}`);
 
-            // Estrazione dati dalla pagina di dettaglio con i nuovi selettori
-            const descrizioneElement = await detailPage.$('p.AdDescription-module_description__E54FP');
+            // Estrazione dati dalla pagina di dettaglio con i NUOVI selettori forniti
+            const descrizioneElement = await detailPage.$('p.AdDescription_description__154FP');
             const descrizione = (await descrizioneElement?.textContent())?.trim();
             console.log(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
 
-            // Nuovo selettore per Likes
-            const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
-            const likes = (await likesElement?.textContent())?.trim();
-            console.log(`Likes: ${likes || 'N/A'}`);
+            const dataElement = await detailPage.$('span.index-module_insertion-date__MU4AZ');
+            const data = (await dataElement?.textContent())?.trim();
+            console.log(`Data Inserzione: ${data || 'N/A'}`);
 
-            // Nuovo selettore per Marca
+            const kilometriElement = await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz');
+            const kilometriText = (await kilometriElement?.textContent())?.trim();
+            const kilometri = kilometriText ? parseInt(kilometriText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
+            console.log(`Kilometri: ${kilometri || 'N/A'}`);
+
+            const comuneElement = await detailPage.$('p.AdInfo_locationText__rDhKP');
+            const comune = (await comuneElement?.textContent())?.trim();
+            console.log(`Comune: ${comune || 'N/A'}`);
+
+            const prezzoDettaglioElement = await detailPage.$('p.AdInfo_price__flXgp');
+            const prezzoDettaglioText = (await prezzoDettaglioElement?.textContent())?.trim();
+            const prezzoDettaglio = prezzoDettaglioText ? parseFloat(prezzoDettaglioText.replace(/€|\s/g, '').replace(',', '.')) : null;
+            console.log(`Prezzo (dettaglio): ${prezzoDettaglio || 'N/A'}`);
+
+            const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
+            const nome = (await nomeElement?.textContent())?.trim();
+            console.log(`Nome Venditore: ${nome || 'N/A'}`);
+
+            const annoElement = await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz');
+            const annoText = (await annoElement?.textContent())?.trim();
+            const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
+            console.log(`Anno: ${anno || 'N/A'}`);
+
+            const cilindrataElement = await detailPage.$('li:nth-of-type(4) span.feature-list_value__SZDpz');
+            const cilindrataText = (await cilindrataElement?.textContent())?.trim();
+            const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
+            console.log(`Cilindrata: ${cilindrata || 'N/A'}`);
+
+            // Selettori di Marca e Modello già presenti, ma li mantengo nel caso servano ancora
             const marcaElement = await detailPage.$('li:nth-of-type(1) span.feature-list_value__SZDpz');
             const marca = (await marcaElement?.textContent())?.trim();
-            console.log(`Marca (dettaglio): ${marca || 'N/A'}`);
+            console.log(`Marca (dettaglio - vecchio selettore): ${marca || 'N/A'}`);
 
-            // Nuovo selettore per Modello
             const modelloElement = await detailPage.$('li:nth-of-type(2) span.feature-list_value__SZDpz');
             const modello = (await modelloElement?.textContent())?.trim();
-            console.log(`Modello (dettaglio): ${modello || 'N/A'}`);
+            console.log(`Modello (dettaglio - vecchio selettore): ${modello || 'N/A'}`);
+
+            const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
+            const likes = (await likesElement?.textContent())?.trim();
+            console.log(`Likes (vecchio selettore): ${likes || 'N/A'}`);
+
 
           } catch (detailPageError) {
             console.error(`❌ Errore durante lo scraping della pagina dettaglio:`, detailPageError.message);
