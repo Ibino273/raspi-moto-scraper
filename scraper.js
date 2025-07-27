@@ -19,6 +19,7 @@ async function runScraper() {
     userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
   });
   const page = await context.newPage();
+  console.log("🔍 Apro Subito.it");
   await page.goto('https://www.subito.it/annunci-piemonte/moto-e-scooter/');
   const listings = await page.$$eval('a.AdCard-module_link__Dq1UD', links =>
     links.map(link => ({
@@ -29,6 +30,7 @@ async function runScraper() {
     }))
   );
   await browser.close();
+  console.log("📦 Numero annunci trovati:", listings.length);
 
   for (const annuncio of listings) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/moto_listings`, {
