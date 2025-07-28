@@ -70,7 +70,18 @@ async function runScraperDebug() {
       return; // Termina se la navigazione fallisce
     }
 
-    // --- Rimosso il blocco di gestione dei cookie ---
+    // --- Gestione del riquadro dei cookie ---
+    try {
+      // Tenta di cliccare "Continua senza accettare"
+      await page.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 7000 });
+      await page.click('span.didomi-continue-without-agreeing');
+      console.log("✅ Cookie: Cliccato 'Continua senza accettare'.");
+    } catch (err) {
+      console.log("⚠️ Cookie: Pulsante 'Continua senza accettare' non trovato o non cliccabile. Continuo lo scraping...");
+      // Se il pulsante specifico non c'è, lo script procede, assumendo che i cookie non siano un blocco.
+      // Potresti voler aggiungere qui una logica per il pulsante "Accetta" se preferisci.
+    }
+    // --- Fine gestione cookie ---
 
     while (pageNumber <= maxPagesToScrape && totalListingsScraped < maxListingsPerRun * maxPagesToScrape) { // Controllo sul numero massimo di annunci per run
       console.log(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
@@ -208,7 +219,7 @@ async function runScraperDebug() {
           }
 
         } catch (itemError) {
-          console.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.message);
+          console.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.slice(0, 100) + '...'); // Tronca il messaggio di errore
         }
         // Add a delay between processing each ad
         await page.waitForTimeout(getRandomDelay(200, 800)); // Reduced to 0.2-0.8 seconds
