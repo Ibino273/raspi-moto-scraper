@@ -99,7 +99,8 @@ async function runScraperDebug() {
               await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
               console.log(`✅ Pagina caricata per: ${fullUrl}`); // Usa fullUrl qui, il titolo sarà estratto dopo
 
-              // Estrazione dati dalla pagina di dettaglio
+              // Estrazione dati dalla pagina di dettaglio con i NUOVI selettori forniti
+              // Nuovo selettore per Titolo (h1)
               const titoloElement = await detailPage.$('h1');
               const titolo = (await titoloElement?.textContent())?.trim();
               console.log(`Titolo: ${titolo || 'N/A'}`);
@@ -152,36 +153,47 @@ async function runScraperDebug() {
 
               // --- NUOVA LOGICA PER I "DATI PRINCIPALI" VARIABILI ---
               console.log("--- Estrazione Dati Principali (Marca, Modello, ecc.) ---");
-              const datiPrincipaliContainer = await detailPage.$('ul.feature-list_feature-list__jDU2M');
+              const mainDataSection = await detailPage.$('section.main-data'); // Nuovo contenitore principale
+
               const parsedFeatures = {};
 
-              if (datiPrincipaliContainer) {
-                const featureItems = await datiPrincipaliContainer.$$('li.feature-list_feature__gAyqB');
-                for (const item of featureItems) {
-                  const labelElement = await item.$('span:first-child'); // Assumiamo che la label sia il primo span
-                  const valueElement = await item.$('span.feature-list_value__SZDpz'); // Assumiamo che il valore sia lo span con questa classe
+              if (mainDataSection) {
+                // Cerca la UL all'interno della section.main-data
+                const datiPrincipaliContainer = await mainDataSection.$('ul.feature-list_feature-list__jDU2M');
 
-                  const label = (await labelElement?.textContent())?.trim();
-                  const value = (await valueElement?.textContent())?.trim();
+                if (datiPrincipaliContainer) {
+                  const featureItems = await datiPrincipaliContainer.$$('li.feature-list_feature__gAyqB');
+                  for (const item of featureItems) {
+                    const labelElement = await item.$('span:first-child'); // Assumiamo che la label sia il primo span
+                    const valueElement = await item.$('span.feature-list_value__SZDpz'); // Assumiamo che il valore sia lo span con questa classe
 
-                  if (label && value) {
-                    // Normalizza la label per usarla come chiave (es. "Marca" -> "marca", "Km" -> "km")
-                    const normalizedLabel = label.toLowerCase().replace(/\s/g, '');
-                    parsedFeatures[normalizedLabel] = value;
+                    const label = (await labelElement?.textContent())?.trim();
+                    const value = (await valueElement?.textContent())?.trim();
+
+                    if (label && value) {
+                      // Normalizza la label per usarla come chiave (es. "Marca" -> "marca", "Km" -> "km")
+                      const normalizedLabel = label.toLowerCase().replace(/\s/g, '');
+                      parsedFeatures[normalizedLabel] = value;
+                    }
                   }
+                  console.log("Dati Principali Parsed:", parsedFeatures);
+
+                  // Stampa i dati estratti per nome
+                  console.log(`Marca: ${parsedFeatures.marca || 'N/A'}`);
+                  console.log(`Modello: ${parsedFeatures.modello || 'N/A'}`);
+                  console.log(`Anno: ${parsedFeatures.immatricolazione || parsedFeatures.anno || 'N/A'}`); // Usa immatricolazione o anno
+                  console.log(`Km: ${parsedFeatures.km || 'N/A'}`);
+                  console.log(`Cilindrata: ${parsedFeatures.cilindrata || 'N/A'}`);
+                  console.log(`Versione: ${parsedFeatures.versione || 'N/A'}`);
+                  console.log(`Tipo di veicolo: ${parsedFeatures.tipodiveicolo || 'N/A'}`);
+                  console.log(`Iva esposta: ${parsedFeatures.ivaesposta || 'N/A'}`);
+                  console.log(`Immatricolazione: ${parsedFeatures.immatricolazione || 'N/A'}`);
+
+                } else {
+                  console.warn("⚠️ Contenitore UL 'feature-list_feature-list__jDU2M' non trovato all'interno di 'section.main-data'.");
                 }
-                console.log("Dati Principali Parsed:", parsedFeatures);
-
-                // Ora puoi accedere ai dati per nome, indipendentemente dalla loro posizione
-                console.log(`Marca (da Dati Principali): ${parsedFeatures.marca || 'N/A'}`);
-                console.log(`Modello (da Dati Principali): ${parsedFeatures.modello || 'N/A'}`);
-                // Puoi aggiungere altri campi qui se li trovi nei "Dati Principali"
-                console.log(`Anno (da Dati Principali): ${parsedFeatures.anno || 'N/A'}`); // Esempio
-                console.log(`Km (da Dati Principali): ${parsedFeatures.km || 'N/A'}`); // Esempio
-                console.log(`Cilindrata (da Dati Principali): ${parsedFeatures.cilindrata || 'N/A'}`); // Esempio
-
               } else {
-                console.warn("⚠️ Contenitore 'Dati Principali' non trovato con selettore 'ul.feature-list_feature-list__jDU2M'.");
+                console.warn("⚠️ Contenitore 'Dati Principali' (section.main-data) non trovato.");
               }
 
             } catch (detailPageError) {
