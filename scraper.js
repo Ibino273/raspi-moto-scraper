@@ -1,4 +1,4 @@
-// scraper.js - Versione per Debug Rapido
+// scraper.js - Versione per Debug (Analizza tutti gli annunci sulla prima pagina)
 require('dotenv').config();
 const { chromium } = require('playwright');
 
@@ -17,7 +17,7 @@ const userAgents = [
   'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5414.86 Mobile Safari/537.36'
 ];
 
-// Funzione per generare un ritardo casuale (non usata in questa versione di debug, ma utile)
+// Funzione per generare un ritardo casuale
 const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 // Funzione per implementare la logica di retry per operazioni fallite (non usata in questa versione di debug)
@@ -93,108 +93,113 @@ async function runScraperDebug() {
     if (listingLinks.length === 0) {
       console.error("❌ Nessun link di annuncio trovato. Il selettore 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' potrebbe essere sbagliato o la pagina è vuota.");
     } else {
-      // Prova a estrarre i dettagli dal primo annuncio per debug
-      const firstLinkElement = listingLinks[0]; // Ora firstLinkElement è direttamente l'elemento <a>
-      const fullUrl = await firstLinkElement?.getAttribute('href');
-      console.log("\n--- Dettagli del PRIMO annuncio trovato ---");
-      console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
+      let annuncioCount = 0;
+      // Itera su ogni link di annuncio trovato
+      for (const linkElement of listingLinks) {
+        annuncioCount++;
+        console.log(`\n--- Elaborazione annuncio #${annuncioCount} ---`);
 
-      try {
-        // I selettori per titolo, prezzo e immagine sono ora relativi al link stesso
-        const titoloElement = await firstLinkElement.$('h2.SmallCardModule_item-data__title');
-        const titolo = (await titoloElement?.textContent())?.trim();
-        console.log(`Titolo: ${titolo || 'N/A'}`);
+        const fullUrl = await linkElement?.getAttribute('href');
+        console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
 
-        const prezzoElement = await firstLinkElement.$('div.SmallCardModule_item-data__price span');
-        const prezzoText = (await prezzoElement?.textContent())?.trim();
-        
-        // CORREZIONE: Gestione del prezzo per formato italiano (es. 3.490 -> 3490)
-        let prezzoParsed = null;
-        if (prezzoText) {
-            const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.'); // Rimuove punti e poi sostituisce virgola con punto
-            prezzoParsed = parseFloat(cleanedPrice);
-        }
-        console.log(`Prezzo (pagina principale): ${prezzoParsed || 'N/A'}`);
+        try {
+          // I selettori per titolo, prezzo e immagine sono ora relativi al link stesso
+          const titoloElement = await linkElement.$('h2.SmallCardModule_item-data__title');
+          const titolo = (await titoloElement?.textContent())?.trim();
+          console.log(`Titolo: ${titolo || 'N/A'}`);
 
-        const imgElement = await firstLinkElement.$('img.SmallCardModule_picture__image');
-        const immagine_url = await imgElement?.getAttribute('src');
-        console.log(`URL Immagine: ${immagine_url || 'N/A'}`);
-
-        if (fullUrl) {
-          console.log("\n--- Tentativo di navigazione alla pagina di dettaglio del PRIMO annuncio ---");
-          const detailPage = await context.newPage();
-          try {
-            await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            console.log(`✅ Pagina dettaglio caricata per: ${titolo}`);
-
-            // Estrazione dati dalla pagina di dettaglio con i NUOVI selettori forniti
-            const descrizioneElement = await detailPage.$('p.AdDescription_description__154FP');
-            const descrizione = (await descrizioneElement?.textContent())?.trim();
-            console.log(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
-
-            const dataElement = await detailPage.$('span.index-module_insertion-date__MU4AZ');
-            const data = (await dataElement?.textContent())?.trim();
-            console.log(`Data Inserzione: ${data || 'N/A'}`);
-
-            const kilometriElement = await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz');
-            const kilometriText = (await kilometriElement?.textContent())?.trim();
-            const kilometri = kilometriText ? parseInt(kilometriText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
-            console.log(`Kilometri: ${kilometri || 'N/A'}`);
-
-            const comuneElement = await detailPage.$('p.AdInfo_locationText__rDhKP');
-            const comune = (await comuneElement?.textContent())?.trim();
-            console.log(`Comune: ${comune || 'N/A'}`);
-
-            const prezzoDettaglioElement = await detailPage.$('p.AdInfo_price__flXgp');
-            const prezzoDettaglioText = (await prezzoDettaglioElement?.textContent())?.trim();
-            
-            // CORREZIONE: Gestione del prezzo per formato italiano anche per il dettaglio
-            let prezzoDettaglioParsed = null;
-            if (prezzoDettaglioText) {
-                const cleanedPriceDettaglio = prezzoDettaglioText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
-                prezzoDettaglioParsed = parseFloat(cleanedPriceDettaglio);
-            }
-            console.log(`Prezzo (dettaglio): ${prezzoDettaglioParsed || 'N/A'}`);
-
-            const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
-            const nome = (await nomeElement?.textContent())?.trim();
-            console.log(`Nome Venditore: ${nome || 'N/A'}`);
-
-            const annoElement = await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz');
-            const annoText = (await annoElement?.textContent())?.trim();
-            const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
-            console.log(`Anno: ${anno || 'N/A'}`);
-
-            const cilindrataElement = await detailPage.$('li:nth-of-type(4) span.feature-list_value__SZDpz');
-            const cilindrataText = (await cilindrataElement?.textContent())?.trim();
-            const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
-            console.log(`Cilindrata: ${cilindrata || 'N/A'}`);
-
-            // Selettori di Marca e Modello già presenti, ma li mantengo nel caso servano ancora
-            const marcaElement = await detailPage.$('li:nth-of-type(1) span.feature-list_value__SZDpz');
-            const marca = (await marcaElement?.textContent())?.trim();
-            console.log(`Marca (dettaglio - vecchio selettore): ${marca || 'N/A'}`);
-
-            const modelloElement = await detailPage.$('li:nth-of-type(2) span.feature-list_value__SZDpz');
-            const modello = (await modelloElement?.textContent())?.trim();
-            console.log(`Modello (dettaglio - vecchio selettore): ${modello || 'N/A'}`);
-
-            const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
-            const likes = (await likesElement?.textContent())?.trim();
-            console.log(`Likes (vecchio selettore): ${likes || 'N/A'}`);
-
-
-          } catch (detailPageError) {
-            console.error(`❌ Errore durante lo scraping della pagina dettaglio:`, detailPageError.message);
-          } finally {
-            await detailPage.close();
+          const prezzoElement = await linkElement.$('div.SmallCardModule_item-data__price span');
+          const prezzoText = (await prezzoElement?.textContent())?.trim();
+          
+          // CORREZIONE: Gestione del prezzo per formato italiano (es. 3.490 -> 3490)
+          let prezzoParsed = null;
+          if (prezzoText) {
+              const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.'); // Rimuove punti e poi sostituisce virgola con punto
+              prezzoParsed = parseFloat(cleanedPrice);
           }
-        } else {
-          console.log("⚠️ Link del primo annuncio non trovato, impossibile visitare la pagina di dettaglio.");
-        }
+          console.log(`Prezzo (pagina principale): ${prezzoParsed || 'N/A'}`);
 
-      } catch (itemError) {
-        console.error("❌ Errore durante l'estrazione dei dettagli dal primo annuncio:", itemError.message);
+          const imgElement = await linkElement.$('img.SmallCardModule_picture__image');
+          const immagine_url = await imgElement?.getAttribute('src');
+          console.log(`URL Immagine: ${immagine_url || 'N/A'}`);
+
+          if (fullUrl) {
+            console.log("--- Tentativo di navigazione alla pagina di dettaglio ---");
+            const detailPage = await context.newPage(); // Apre una nuova pagina per il dettaglio
+            try {
+              await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+              console.log(`✅ Pagina dettaglio caricata per: ${titolo}`);
+
+              // Estrazione dati dalla pagina di dettaglio con i NUOVI selettori forniti
+              const descrizioneElement = await detailPage.$('p.AdDescription_description__154FP');
+              const descrizione = (await descrizioneElement?.textContent())?.trim();
+              console.log(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
+
+              const dataElement = await detailPage.$('span.index-module_insertion-date__MU4AZ');
+              const data = (await dataElement?.textContent())?.trim();
+              console.log(`Data Inserzione: ${data || 'N/A'}`);
+
+              const kilometriElement = await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz');
+              const kilometriText = (await kilometriElement?.textContent())?.trim();
+              const kilometri = kilometriText ? parseInt(kilometriText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
+              console.log(`Kilometri: ${kilometri || 'N/A'}`);
+
+              const comuneElement = await detailPage.$('p.AdInfo_locationText__rDhKP');
+              const comune = (await comuneElement?.textContent())?.trim();
+              console.log(`Comune: ${comune || 'N/A'}`);
+
+              const prezzoDettaglioElement = await detailPage.$('p.AdInfo_price__flXgp');
+              const prezzoDettaglioText = (await prezzoDettaglioElement?.textContent())?.trim();
+              
+              // CORREZIONE: Gestione del prezzo per formato italiano anche per il dettaglio
+              let prezzoDettaglioParsed = null;
+              if (prezzoDettaglioText) {
+                  const cleanedPriceDettaglio = prezzoDettaglioText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
+                  prezzoDettaglioParsed = parseFloat(cleanedPriceDettaglio);
+              }
+              console.log(`Prezzo (dettaglio): ${prezzoDettaglioParsed || 'N/A'}`);
+
+              const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
+              const nome = (await nomeElement?.textContent())?.trim();
+              console.log(`Nome Venditore: ${nome || 'N/A'}`);
+
+              const annoElement = await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz');
+              const annoText = (await annoElement?.textContent())?.trim();
+              const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
+              console.log(`Anno: ${anno || 'N/A'}`);
+
+              const cilindrataElement = await detailPage.$('li:nth-of-type(4) span.feature-list_value__SZDpz');
+              const cilindrataText = (await cilindrataElement?.textContent())?.trim();
+              const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
+              console.log(`Cilindrata: ${cilindrata || 'N/A'}`);
+
+              // Selettori di Marca e Modello già presenti, ma li mantengo nel caso servano ancora
+              const marcaElement = await detailPage.$('li:nth-of-type(1) span.feature-list_value__SZDpz');
+              const marca = (await marcaElement?.textContent())?.trim();
+              console.log(`Marca (dettaglio - vecchio selettore): ${marca || 'N/A'}`);
+
+              const modelloElement = await detailPage.$('li:nth-of-type(2) span.feature-list_value__SZDpz');
+              const modello = (await modelloElement?.textContent())?.trim();
+              console.log(`Modello (dettaglio - vecchio selettore): ${modello || 'N/A'}`);
+
+              const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
+              const likes = (await likesElement?.textContent())?.trim();
+              console.log(`Likes (vecchio selettore): ${likes || 'N/A'}`);
+
+            } catch (detailPageError) {
+              console.error(`❌ Errore durante lo scraping della pagina dettaglio per "${fullUrl}":`, detailPageError.message);
+            } finally {
+              await detailPage.close(); // Chiude la pagina di dettaglio
+            }
+          } else {
+            console.log("⚠️ Link annuncio non trovato, impossibile visitare la pagina di dettaglio.");
+          }
+
+        } catch (itemError) {
+          console.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.message);
+        }
+        // Aggiungi un ritardo tra l'elaborazione di un annuncio e il successivo
+        await page.waitForTimeout(getRandomDelay(1000, 3000));
       }
     }
 
