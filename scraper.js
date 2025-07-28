@@ -326,13 +326,20 @@ async function runScraperDebug() {
           await nextPageButton.waitForElementState('visible', { timeout: 5000 });
           await nextPageButton.waitForElementState('enabled', { timeout: 5000 });
 
+          const currentUrl = page.url(); // Salva l'URL corrente prima del click
+
           await nextPageButton.click();
           logger.info(`➡️ Cliccato il pulsante "Pagina successiva" per andare alla pagina ${pageNumber + 1}.`);
-          pageNumber++; // Increment the page number for the next iteration
-          await page.waitForTimeout(getRandomDelay(1000, 3000)); // Wait for the new page to load (reduced)
+          
+          // Attendi che l'URL cambi per la nuova pagina
+          const expectedNextPageUrlPart = `?o=${pageNumber + 1}`;
+          await page.waitForURL((url) => url.toString().includes(expectedNextPageUrlPart) || url.toString() !== currentUrl, { timeout: 30000 }); // Attendi fino a 30 secondi per il cambio URL
+
+          pageNumber++; // Incrementa il numero di pagina per la prossima iterazione
+          // Rimosso il getRandomDelay qui, poiché waitForURL è più preciso
         } catch (clickError) {
-          logger.warn(`⚠️ Could not click the "Next Page" button on page ${pageNumber}:`, clickError.message);
-          logger.info("🛑 End of pagination (button not clickable or no longer available).");
+          logger.warn(`⚠️ Impossibile cliccare il pulsante "Pagina successiva" sulla pagina ${pageNumber}:`, clickError.message);
+          logger.info("🛑 Fine della paginazione (pulsante non cliccabile o non più disponibile).");
           errorsEncountered++;
           break; // Interrompi se il pulsante non è cliccabile o scompare
         }
