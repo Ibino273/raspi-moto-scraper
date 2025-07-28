@@ -76,10 +76,16 @@ async function runScraperDebug() {
       await page.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 7000 });
       await page.click('span.didomi-continue-without-agreeing');
       console.log("✅ Cookie: Cliccato 'Continua senza accettare'.");
-    } catch (err) {
-      console.log("⚠️ Cookie: Pulsante 'Continua senza accettare' non trovato o non cliccabile. Continuo lo scraping...");
-      // Se il pulsante specifico non c'è, lo script procede, assumendo che i cookie non siano un blocco.
-      // Potresti voler aggiungere qui una logica per il pulsante "Accetta" se preferisci.
+    } catch (err1) {
+      console.log("⚠️ Cookie: Pulsante 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare i cookie...");
+      try {
+        // Se "Continua senza accettare" fallisce, tenta di cliccare "Accetta"
+        await page.waitForSelector('.didomi-dismiss-button span', { timeout: 5000 });
+        await page.click('.didomi-dismiss-button span');
+        console.log("✅ Cookie: Cliccato 'Accetta'.");
+      } catch (err2) {
+        console.log("⚠️ Cookie: Nessun pulsante cookie cliccabile trovato. Continuo lo scraping...");
+      }
     }
     // --- Fine gestione cookie ---
 
@@ -250,7 +256,7 @@ async function runScraperDebug() {
         } catch (clickError) {
           console.warn(`⚠️ Could not click the "Next Page" button on page ${pageNumber}:`, clickError.message);
           console.log("🛑 End of pagination (button not clickable or no longer available).");
-          break; // Stop if the button is not clickable or disappears
+          break; // Interrompi se il pulsante non è cliccabile o scompare
         }
       } else {
         console.log("🛑 'Next Page' button not found. End of pagination.");
