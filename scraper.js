@@ -81,7 +81,7 @@ async function runScraperDebug() {
       try {
         // Se "Continua senza accettare" fallisce, tenta di cliccare "Accetta"
         await page.waitForSelector('.didomi-dismiss-button span', { timeout: 5000 });
-        await page.click('.didomi-dismiss-button span');
+        await page.click('button.didomi-dismiss-button');
         console.log("✅ Cookie: Cliccato 'Accetta'.");
       } catch (err2) {
         console.log("⚠️ Cookie: Nessun pulsante cookie cliccabile trovato. Continuo lo scraping...");
