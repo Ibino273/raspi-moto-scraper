@@ -48,7 +48,7 @@ async function runScraperDebug() {
   try {
     // Avvia il browser Chromium in modalità headless per maggiore velocità
     browser = await chromium.launch({
-      headless: false, // Impostato su true per velocizzare, significa che non visualizza
+      headless: true, // Impostato su true per velocizzare, significa che non visualizza
       executablePath: '/usr/bin/chromium-browser',
       args: ['--start-fullscreen']
     });
@@ -70,22 +70,77 @@ async function runScraperDebug() {
       return; // Termina se la navigazione fallisce
     }
 
-    // --- Gestione del riquadro dei cookie ---
+    // --- Gestione del riquadro dei cookie (Strategia più robusta con contenitore) ---
+    let cookieHandled = false;
     try {
-      // Tenta di cliccare "Continua senza accettare"
-      await page.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 7000 });
-      await page.click('didomi-continue-without-agreeing');
-      console.log("✅ Cookie: Cliccato 'Continua senza accettare'.");
-    } catch (err1) {
-      console.log("⚠️ Cookie: Pulsante 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare i cookie...");
-      try {
-        // Se "Continua senza accettare" fallisce, tenta di cliccare "Accetta"
-        await page.waitForSelector('didomi-notice-agree-button', { timeout: 5000 });
-        await page.click('button.didomi-dismiss-button');
-        console.log("✅ Cookie: Cliccato 'Accetta'.");
-      } catch (err2) {
-        console.log("⚠️ Cookie: Nessun pulsante cookie cliccabile trovato. Continuo lo scraping...");
+      // Attendi il contenitore del popup dei cookie
+      const cookieContainer = await page.waitForSelector('div.didomi-popup-container', { timeout: 7000, state: 'visible' });
+      
+      if (cookieContainer) {
+        console.log("✅ Cookie: Riquadro cookie rilevato. Tentativo di chiusura...");
+        
+        // Tentativo 1: Clicca "Continua senza accettare" all'interno del contenitore
+        try {
+          const continueButton = await cookieContainer.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 3000, state: 'visible' });
+          if (continueButton) {
+            await continueButton.click();
+            console.log("✅ Cookie: Cliccato 'Continua senza accettare'.");
+            cookieHandled = true;
+          }
+        } catch (err1) {
+          console.log("⚠️ Cookie: 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare...");
+        }
+
+        if (!cookieHandled) {
+          // Tentativo 2: Clicca "Accetta" all'interno del contenitore
+          try {
+            const acceptButton = await cookieContainer.waitForSelector('button:has-text("Accetta")', { timeout: 3000, state: 'visible' });
+            if (acceptButton) {
+              await acceptButton.click();
+              console.log("✅ Cookie: Cliccato 'Accetta'.");
+              cookieHandled = true;
+            }
+          } catch (err2) {
+            console.log("⚠️ Cookie: 'Accetta' non trovato o non cliccabile. Tentativo di chiudere via JS...");
+          }
+        }
+      } else {
+        console.log("ℹ️ Cookie: Riquadro cookie non rilevato dopo l'attesa iniziale.");
+        cookieHandled = true; // Se non c'è il container, consideriamo gestito
       }
+    } catch (containerErr) {
+      console.log("⚠️ Cookie: Contenitore principale dei cookie non apparso. Continuo lo scraping...");
+      cookieHandled = false; // Non è stato gestito tramite click
+    }
+
+    if (!cookieHandled) {
+      try {
+        // Tentativo 3: Rimuovi l'overlay dei cookie via JavaScript
+        await page.evaluate(() => {
+          const dialog = document.querySelector('.didomi-popup-open'); // Classe comune per il body quando il popup è aperto
+          if (dialog) {
+            dialog.style.overflow = 'auto'; // Ripristina lo scroll
+          }
+          const cookieBanner = document.getElementById('didomi-host'); // ID comune del banner
+          if (cookieBanner) {
+            cookieBanner.remove();
+          }
+          const cookieOverlay = document.querySelector('.didomi-popup-backdrop'); // Selettore per l'overlay
+          if (cookieOverlay) {
+            cookieOverlay.remove();
+          }
+          // Potrebbe esserci anche un elemento che blocca lo scroll del body
+          document.body.style.overflow = 'auto'; 
+        });
+        console.log("✅ Cookie: Rimosso l'overlay via JavaScript.");
+        cookieHandled = true;
+      } catch (err3) {
+        console.error("❌ Cookie: Errore durante la rimozione dell'overlay via JavaScript:", err3.message);
+      }
+    }
+
+    if (!cookieHandled) {
+      console.warn("⚠️ Cookie: Impossibile gestire la finestra dei cookie. Potrebbe bloccare lo scraping.");
     }
     // --- Fine gestione cookie ---
 
