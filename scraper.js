@@ -65,23 +65,9 @@ async function runScraperDebug() {
       return; // Termina se la navigazione fallisce
     }
 
-    // Gestione dei cookie
-    try {
-      await page.waitForSelector('button:has-text("Accetta")', { timeout: 7000 });
-      await page.click('button:has-text("Accetta")');
-      console.log("✅ Cookie accettati");
-    } catch (err1) {
-      console.log("⚠️ 'Accetta' non trovato, provo con 'Continua senza accettare'...");
-      try {
-        await page.waitForSelector('text=Continua senza accettare', { timeout: 5000 });
-        await page.click('text=Continua senza accettare');
-        console.log("✅ Cookie rifiutati");
-      } catch (err2) {
-        console.log("⚠️ Nessun pulsante cookie cliccabile trovato, continuo il debug...");
-      }
-    }
+    // --- Rimosso il blocco di gestione dei cookie come richiesto ---
 
-    // Attendi un attimo per assicurarti che la pagina sia completamente renderizzata dopo la gestione dei cookie
+    // Attendi un attimo per assicurarti che la pagina sia completamente renderizzata
     await page.waitForTimeout(3000); // 3 secondi di attesa
 
     console.log("--- Tentativo di estrazione annunci dalla pagina principale ---");
@@ -103,34 +89,22 @@ async function runScraperDebug() {
         console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
 
         try {
-          // I selettori per titolo, prezzo e immagine sono ora relativi al link stesso
-          const titoloElement = await linkElement.$('h2.SmallCardModule_item-data__title');
-          const titolo = (await titoloElement?.textContent())?.trim();
-          console.log(`Titolo: ${titolo || 'N/A'}`);
-
-          const prezzoElement = await linkElement.$('div.SmallCardModule_item-data__price span');
-          const prezzoText = (await prezzoElement?.textContent())?.trim();
-          
-          // CORREZIONE: Gestione del prezzo per formato italiano (es. 3.490 -> 3490)
-          let prezzoParsed = null;
-          if (prezzoText) {
-              const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.'); // Rimuove punti e poi sostituisce virgola con punto
-              prezzoParsed = parseFloat(cleanedPrice);
-          }
-          console.log(`Prezzo (pagina principale): ${prezzoParsed || 'N/A'}`);
-
-          const imgElement = await linkElement.$('img.SmallCardModule_picture__image');
-          const immagine_url = await imgElement?.getAttribute('src');
-          console.log(`URL Immagine: ${immagine_url || 'N/A'}`);
+          // --- Rimossa la raccolta dati di Titolo, Prezzo e Immagine dalla pagina principale come richiesto ---
+          // Questi dati verranno raccolti dalla pagina di dettaglio.
 
           if (fullUrl) {
             console.log("--- Tentativo di navigazione alla pagina di dettaglio ---");
             const detailPage = await context.newPage(); // Apre una nuova pagina per il dettaglio
             try {
               await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-              console.log(`✅ Pagina dettaglio caricata per: ${titolo}`);
+              console.log(`✅ Pagina caricata per: ${fullUrl}`); // Usa fullUrl qui, il titolo sarà estratto dopo
 
               // Estrazione dati dalla pagina di dettaglio con i NUOVI selettori forniti
+              // Nuovo selettore per Titolo (h1)
+              const titoloElement = await detailPage.$('h1');
+              const titolo = (await titoloElement?.textContent())?.trim();
+              console.log(`Titolo: ${titolo || 'N/A'}`);
+
               const descrizioneElement = await detailPage.$('p.AdDescription_description__154FP');
               const descrizione = (await descrizioneElement?.textContent())?.trim();
               console.log(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
@@ -148,16 +122,16 @@ async function runScraperDebug() {
               const comune = (await comuneElement?.textContent())?.trim();
               console.log(`Comune: ${comune || 'N/A'}`);
 
-              const prezzoDettaglioElement = await detailPage.$('p.AdInfo_price__flXgp');
-              const prezzoDettaglioText = (await prezzoDettaglioElement?.textContent())?.trim();
+              const prezzoElement = await detailPage.$('p.AdInfo_price__flXgp');
+              const prezzoText = (await prezzoElement?.textContent())?.trim();
               
               // CORREZIONE: Gestione del prezzo per formato italiano anche per il dettaglio
-              let prezzoDettaglioParsed = null;
-              if (prezzoDettaglioText) {
-                  const cleanedPriceDettaglio = prezzoDettaglioText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
-                  prezzoDettaglioParsed = parseFloat(cleanedPriceDettaglio);
+              let prezzoParsed = null;
+              if (prezzoText) {
+                  const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
+                  prezzoParsed = parseFloat(cleanedPrice);
               }
-              console.log(`Prezzo (dettaglio): ${prezzoDettaglioParsed || 'N/A'}`);
+              console.log(`Prezzo: ${prezzoParsed || 'N/A'}`);
 
               const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
               const nome = (await nomeElement?.textContent())?.trim();
@@ -173,26 +147,27 @@ async function runScraperDebug() {
               const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
               console.log(`Cilindrata: ${cilindrata || 'N/A'}`);
 
-              // Selettori di Marca e Modello già presenti, ma li mantengo nel caso servano ancora
+              // Selettori di Marca e Modello già presenti
               const marcaElement = await detailPage.$('li:nth-of-type(1) span.feature-list_value__SZDpz');
               const marca = (await marcaElement?.textContent())?.trim();
-              console.log(`Marca (dettaglio - vecchio selettore): ${marca || 'N/A'}`);
+              console.log(`Marca: ${marca || 'N/A'}`);
 
               const modelloElement = await detailPage.$('li:nth-of-type(2) span.feature-list_value__SZDpz');
               const modello = (await modelloElement?.textContent())?.trim();
-              console.log(`Modello (dettaglio - vecchio selettore): ${modello || 'N/A'}`);
+              console.log(`Modello: ${modello || 'N/A'}`);
 
               const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
               const likes = (await likesElement?.textContent())?.trim();
-              console.log(`Likes (vecchio selettore): ${likes || 'N/A'}`);
+              console.log(`Likes: ${likes || 'N/A'}`);
+
 
             } catch (detailPageError) {
-              console.error(`❌ Errore durante lo scraping della pagina dettaglio per "${fullUrl}":`, detailPageError.message);
+              console.error(`❌ Errore durante lo scraping della pagina per "${fullUrl}":`, detailPageError.message);
             } finally {
               await detailPage.close(); // Chiude la pagina di dettaglio
             }
           } else {
-            console.log("⚠️ Link annuncio non trovato, impossibile visitare la pagina di dettaglio.");
+            console.log("⚠️ Link annuncio non trovato, impossibile visitare la pagina.");
           }
 
         } catch (itemError) {
