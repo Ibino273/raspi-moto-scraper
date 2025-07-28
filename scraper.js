@@ -1,6 +1,21 @@
 // scraper.js - Versione per Debug (Analizza 2 annunci per pagina, su 3 pagine)
 require('dotenv').config();
 const { chromium } = require('playwright');
+const winston = require('winston'); // Importa winston
+const config = require('./config'); // Importa la configurazione esterna
+
+// Configurazione del logger
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.printf(info => `${info.timestamp} ${info.level.toUpperCase()}: ${info.message}`)
+  ),
+  transports: [
+    new winston.transports.Console(), // Logga anche in console
+    new winston.transports.File({ filename: config.LOG_FILE_PATH }) // Logga su file
+  ],
+});
 
 // Nota: SUPABASE_URL e SUPABASE_API_KEY non sono usati in questa versione di debug.
 // Le variabili d'ambiente sono ancora caricate, ma non attivamente utilizzate per le operazioni di DB.
@@ -26,7 +41,7 @@ async function withRetry(fn, retries = 3, delay = 1000) {
     try {
       return await fn();
     } catch (error) {
-      console.warn(`Tentativo ${i + 1} fallito. Riprovo in ${delay / 1000} secondi...`, error.message);
+      logger.warn(`Tentativo ${i + 1} fallito. Riprovo in ${delay / 1000} secondi...`, error.message);
       if (i < retries - 1) {
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2; // Aumenta il ritardo per i tentativi successivi
@@ -39,11 +54,13 @@ async function withRetry(fn, retries = 3, delay = 1000) {
 
 async function runScraperDebug() {
   let browser;
-  const BASE_URL = 'https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/';
+  const BASE_URL = config.BASE_URL; // Caricato da config.js
   let pageNumber = 1;
-  const maxPagesToScrape = 3; // Limite massimo di pagine da scansionare: 3 pagine
-  const maxListingsPerRun = 1; // Limite di annunci da scrapare per ogni esecuzione dello script (modificato a 2)
+  const maxPagesToScrape = config.MAX_PAGES_TO_SCRAPE; // Caricato da config.js
+  const maxListingsPerRun = config.MAX_LISTINGS_PER_PAGE_DEBUG; // Caricato da config.js
+  const maxTotalListingsToScrape = config.MAX_TOTAL_LISTINGS_DEBUG; // Caricato da config.js
   let totalListingsScraped = 0; // Contatore totale annunci scrapati
+  let errorsEncountered = 0; // Contatore errori
 
   try {
     // Avvia il browser Chromium in modalità headless per maggiore velocità
@@ -61,12 +78,13 @@ async function runScraperDebug() {
     const page = await context.newPage();
 
     // Naviga alla prima pagina una sola volta all'inizio
-    console.log(`🌐 Navigazione alla pagina iniziale: ${BASE_URL}...`);
+    logger.info(`🌐 Navigazione alla pagina iniziale: ${BASE_URL}...`);
     try {
       await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      console.log(`✅ Pagina ${pageNumber} caricata: ${BASE_URL}`);
+      logger.info(`✅ Pagina ${pageNumber} caricata: ${BASE_URL}`);
     } catch (navigationError) {
-      console.error(`❌ Errore di navigazione alla pagina iniziale:`, navigationError.message);
+      logger.error(`❌ Errore di navigazione alla pagina iniziale:`, navigationError.message);
+      errorsEncountered++;
       return; // Termina se la navigazione fallisce
     }
 
@@ -77,18 +95,18 @@ async function runScraperDebug() {
       const cookieContainer = await page.waitForSelector('div.didomi-popup-container', { timeout: 7000, state: 'visible' });
       
       if (cookieContainer) {
-        console.log("✅ Cookie: Riquadro cookie rilevato. Tentativo di chiusura...");
+        logger.info("✅ Cookie: Riquadro cookie rilevato. Tentativo di chiusura...");
         
         // Tentativo 1: Clicca "Continua senza accettare" all'interno del contenitore
         try {
           const continueButton = await cookieContainer.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 3000, state: 'visible' });
           if (continueButton) {
             await continueButton.click();
-            console.log("✅ Cookie: Cliccato 'Continua senza accettare'.");
+            logger.info("✅ Cookie: Cliccato 'Continua senza accettare'.");
             cookieHandled = true;
           }
         } catch (err1) {
-          console.log("⚠️ Cookie: 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare...");
+          logger.warn("⚠️ Cookie: 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare...");
         }
 
         if (!cookieHandled) {
@@ -97,19 +115,19 @@ async function runScraperDebug() {
             const acceptButton = await cookieContainer.waitForSelector('button:has-text("Accetta")', { timeout: 3000, state: 'visible' });
             if (acceptButton) {
               await acceptButton.click();
-              console.log("✅ Cookie: Cliccato 'Accetta'.");
+              logger.info("✅ Cookie: Cliccato 'Accetta'.");
               cookieHandled = true;
             }
           } catch (err2) {
-            console.log("⚠️ Cookie: 'Accetta' non trovato o non cliccabile. Tentativo di chiudere via JS...");
+            logger.warn("⚠️ Cookie: 'Accetta' non trovato o non cliccabile. Tentativo di chiudere via JS...");
           }
         }
       } else {
-        console.log("ℹ️ Cookie: Riquadro cookie non rilevato dopo l'attesa iniziale.");
+        logger.info("ℹ️ Cookie: Riquadro cookie non rilevato dopo l'attesa iniziale.");
         cookieHandled = true; // Se non c'è il container, consideriamo gestito
       }
     } catch (containerErr) {
-      console.log("⚠️ Cookie: Contenitore principale dei cookie non apparso. Continuo lo scraping...");
+      logger.info("⚠️ Cookie: Contenitore principale dei cookie non apparso. Continuo lo scraping...");
       cookieHandled = false; // Non è stato gestito tramite click
     }
 
@@ -132,79 +150,81 @@ async function runScraperDebug() {
           // Potrebbe esserci anche un elemento che blocca lo scroll del body
           document.body.style.overflow = 'auto'; 
         });
-        console.log("✅ Cookie: Rimosso l'overlay via JavaScript.");
+        logger.info("✅ Cookie: Rimosso l'overlay via JavaScript.");
         cookieHandled = true;
       } catch (err3) {
-        console.error("❌ Cookie: Errore durante la rimozione dell'overlay via JavaScript:", err3.message);
+        logger.error("❌ Cookie: Errore durante la rimozione dell'overlay via JavaScript:", err3.message);
+        errorsEncountered++;
       }
     }
 
     if (!cookieHandled) {
-      console.warn("⚠️ Cookie: Impossibile gestire la finestra dei cookie. Potrebbe bloccare lo scraping.");
+      logger.warn("⚠️ Cookie: Impossibile gestire la finestra dei cookie. Potrebbe bloccare lo scraping.");
     }
     // --- Fine gestione cookie ---
 
-    while (pageNumber <= maxPagesToScrape && totalListingsScraped < maxListingsPerRun * maxPagesToScrape) { // Controllo sul numero massimo di annunci per run
-      console.log(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
+    while (pageNumber <= maxPagesToScrape && totalListingsScraped < maxTotalListingsToScrape) { // Controllo sul numero massimo di annunci per run
+      logger.info(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
 
-      console.log("--- Tentativo di estrazione annunci dalla pagina principale ---");
+      logger.info("--- Tentativo di estrazione annunci dalla pagina principale ---");
 
       // Estrai tutti i link degli annunci utilizzando il selettore fornito
       const listingLinks = await page.$$('div:nth-of-type(3) a.SmallCard-module_link__hOkzY');
-      console.log(`🔍 Trovati ${listingLinks.length} link di annunci con 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' su questa pagina.`);
+      logger.info(`🔍 Trovati ${listingLinks.length} link di annunci con 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' su questa pagina.`);
 
       if (listingLinks.length === 0 && pageNumber === 1) {
-        console.error("❌ Nessun link di annuncio trovato sulla prima pagina. Il selettore 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' potrebbe essere sbagliato o la pagina è vuota.");
+        logger.error("❌ Nessun link di annuncio trovato sulla prima pagina. Il selettore 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' potrebbe essere sbagliato o la pagina è vuota.");
+        errorsEncountered++;
         break; // Nessun annuncio sulla prima pagina, termina
       } else if (listingLinks.length === 0 && pageNumber > 1) {
-        console.log("ℹ️ Nessun annuncio trovato su questa pagina. Fine della paginazione.");
+        logger.info("ℹ️ Nessun annuncio trovato su questa pagina. Fine della paginazione.");
         break; // Nessun annuncio sulle pagine successive, fine della paginazione
       }
       
       let annuncioCountOnPage = 0;
       // Itera su ogni link di annuncio trovato, limitando a `maxListingsPerRun`
       for (const linkElement of listingLinks) {
-        if (annuncioCountOnPage >= maxListingsPerRun || totalListingsScraped >= maxListingsPerRun * maxPagesToScrape) {
-          console.log(`🏁 Raggiunto il limite di ${maxListingsPerRun} annunci per pagina o il limite totale. Arresto l'elaborazione degli annunci su questa pagina.`);
+        if (annuncioCountOnPage >= maxListingsPerRun || totalListingsScraped >= maxTotalListingsToScrape) {
+          logger.info(`🏁 Raggiunto il limite di ${maxListingsPerRun} annunci per pagina o il limite totale. Arresto l'elaborazione degli annunci su questa pagina.`);
           break; // Esci dal ciclo for se il limite per pagina o il limite totale è raggiunto
         }
 
         annuncioCountOnPage++;
         totalListingsScraped++; // Incrementa il contatore totale
-        console.log(`\n--- Elaborazione annuncio #${annuncioCountOnPage} (Pagina ${pageNumber}, Totale: ${totalListingsScraped}) ---`);
+        logger.info(`\n--- Elaborazione annuncio #${annuncioCountOnPage} (Pagina ${pageNumber}, Totale: ${totalListingsScraped}) ---`);
 
         const fullUrl = await linkElement?.getAttribute('href');
-        console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
+        logger.info(`Link annuncio: ${fullUrl || 'N/A'}`);
 
         try {
           if (fullUrl) {
-            console.log("--- Tentativo di navigazione alla pagina di dettaglio ---");
+            logger.info("--- Tentativo di navigazione alla pagina di dettaglio ---");
             const detailPage = await context.newPage(); // Apre una nuova pagina per il dettaglio
             try {
               await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-              console.log(`✅ Pagina caricata per: ${fullUrl}`);
+              logger.info(`✅ Pagina caricata per: ${fullUrl}`);
 
               // Estrazione dati dalla pagina di dettaglio con i selettori forniti
               const titoloElement = await detailPage.$('h1');
               const titolo = (await titoloElement?.textContent())?.trim();
-              console.log(`Titolo: ${titolo || 'N/A'}`);
+              logger.info(`Titolo: ${titolo || 'N/A'}`);
 
               const descrizioneElement = await detailPage.$('p.AdDescription_description__154FP');
               const descrizione = (await descrizioneElement?.textContent())?.trim();
-              console.log(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
+              logger.info(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
 
               const dataElement = await detailPage.$('span.index-module_insertion-date__MU4AZ');
               const data = (await dataElement?.textContent())?.trim();
-              console.log(`Data Inserzione: ${data || 'N/A'}`);
+              logger.info(`Data Inserzione: ${data || 'N/A'}`);
 
               const kilometriElement = await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz');
               const kilometriText = (await kilometriElement?.textContent())?.trim();
               const kilometri = kilometriText ? parseInt(kilometriText.replace(/\D/g, '')) : null;
-              console.log(`Kilometri: ${kilometri || 'N/A'}`);
+              logger.info(`Kilometri: ${kilometri || 'N/A'}`);
 
               const comuneElement = await detailPage.$('p.AdInfo_locationText__rDhKP');
               const comune = (await comuneElement?.textContent())?.trim();
-              console.log(`Comune: ${comune || 'N/A'}`);
+              logger.info(`Comune: ${comune || 'N/A'}`);
 
               const prezzoElement = await detailPage.$('p.AdInfo_price__flXgp');
               const prezzoText = (await prezzoElement?.textContent())?.trim();
@@ -214,28 +234,28 @@ async function runScraperDebug() {
                   const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
                   prezzoParsed = parseFloat(cleanedPrice);
               }
-              console.log(`Prezzo: ${prezzoParsed || 'N/A'}`);
+              logger.info(`Prezzo: ${prezzoParsed || 'N/A'}`);
 
               const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
               const nome = (await nomeElement?.textContent())?.trim();
-              console.log(`Nome Venditore: ${nome || 'N/A'}`);
+              logger.info(`Nome Venditore: ${nome || 'N/A'}`);
 
               const annoElement = await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz');
               const annoText = (await annoElement?.textContent())?.trim();
               const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null;
-              console.log(`Anno: ${anno || 'N/A'}`);
+              logger.info(`Anno: ${anno || 'N/A'}`);
 
               const cilindrataElement = await detailPage.$('li:nth-of-type(4) span.feature-list_value__SZDpz');
               const cilindrataText = (await cilindrataElement?.textContent())?.trim();
               const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null;
-              console.log(`Cilindrata: ${cilindrata || 'N/A'}`);
+              logger.info(`Cilindrata: ${cilindrata || 'N/A'}`);
 
               const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
               const likes = (await likesElement?.textContent())?.trim();
-              console.log(`Likes: ${likes || 'N/A'}`);
+              logger.info(`Likes: ${likes || 'N/A'}`);
 
               // --- LOGICA PER I "DATI PRINCIPALI" VARIABILI ---
-              console.log("--- Estrazione Dati Principali (Marca, Modello, ecc.) ---");
+              logger.info("--- Estrazione Dati Principali (Marca, Modello, ecc.) ---");
               const mainDataSection = await detailPage.$('section.main-data');
 
               const parsedFeatures = {};
@@ -254,46 +274,48 @@ async function runScraperDebug() {
                     parsedFeatures[normalizedLabel] = value;
                   }
                 }
-                console.log("Dati Principali Parsed:", parsedFeatures);
+                logger.info("Dati Principali Parsed:", parsedFeatures);
 
-                console.log(`Marca: ${parsedFeatures.marca || 'N/A'}`);
-                console.log(`Modello: ${parsedFeatures.modello || 'N/A'}`);
-                console.log(`Anno: ${parsedFeatures.immatricolazione || parsedFeatures.anno || 'N/A'}`);
-                console.log(`Km: ${parsedFeatures.km || 'N/A'}`);
-                console.log(`Cilindrata: ${parsedFeatures.cilindrata || 'N/A'}`);
-                console.log(`Versione: ${parsedFeatures.versione || 'N/A'}`);
-                console.log(`Tipo di veicolo: ${parsedFeatures.tipodiveicolo || 'N/A'}`);
-                console.log(`Iva esposta: ${parsedFeatures.ivaesposta || 'N/A'}`);
-                console.log(`Immatricolazione: ${parsedFeatures.immatricolazione || 'N/A'}`);
+                logger.info(`Marca: ${parsedFeatures.marca || 'N/A'}`);
+                logger.info(`Modello: ${parsedFeatures.modello || 'N/A'}`);
+                logger.info(`Anno: ${parsedFeatures.immatricolazione || parsedFeatures.anno || 'N/A'}`);
+                logger.info(`Km: ${parsedFeatures.km || 'N/A'}`);
+                logger.info(`Cilindrata: ${parsedFeatures.cilindrata || 'N/A'}`);
+                logger.info(`Versione: ${parsedFeatures.versione || 'N/A'}`);
+                logger.info(`Tipo di veicolo: ${parsedFeatures.tipodiveicolo || 'N/A'}`);
+                logger.info(`Iva esposta: ${parsedFeatures.ivaesposta || 'N/A'}`);
+                logger.info(`Immatricolazione: ${parsedFeatures.immatricolazione || 'N/A'}`);
 
               } else {
-                console.warn("⚠️ Contenitore 'Dati Principali' (section.main-data) non trovato.");
+                logger.warn("⚠️ Contenitore 'Dati Principali' (section.main-data) non trovato.");
               }
 
             } catch (detailPageError) {
-              console.error(`❌ Errore durante lo scraping della pagina per "${fullUrl}":`, detailPageError.message);
+              logger.error(`❌ Errore durante lo scraping della pagina per "${fullUrl}":`, detailPageError.message);
+              errorsEncountered++;
             } finally {
               await detailPage.close();
             }
           } else {
-            console.log("⚠️ Link annuncio non trovato, impossibile visitare la pagina.");
+            logger.warn("⚠️ Link annuncio non trovato, impossibile visitare la pagina.");
           }
 
         } catch (itemError) {
-          console.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.slice(0, 100) + '...'); // Tronca il messaggio di errore
+          logger.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.slice(0, 100) + '...'); // Tronca il messaggio di errore
+          errorsEncountered++;
         }
         // Add a delay between processing each ad
         await page.waitForTimeout(getRandomDelay(200, 800)); // Reduced to 0.2-0.8 seconds
       }
 
       // If the limit of ads has been reached within the for loop, we also exit the while loop
-      if (totalListingsScraped >= maxListingsPerRun * maxPagesToScrape) {
-        console.log(`🏁 Reached the limit of ${maxListingsPerRun * maxPagesToScrape} ads. Stopping scraping.`);
+      if (totalListingsScraped >= maxTotalListingsToScrape) {
+        logger.info(`🏁 Raggiunto il limite di ${maxTotalListingsToScrape} annunci. Arresto lo scraping.`);
         break;
       }
 
       // --- Pagination Logic ---
-      console.log(`\n--- Checking "Next Page" button on Page ${pageNumber} ---`);
+      logger.info(`\n--- Controllo pulsante "Pagina successiva" sulla Pagina ${pageNumber} ---`);
       // Nuovo selettore per il pulsante "Pagina successiva"
       const nextPageButtonSelector = "button[aria-label='Andare alla prossima pagina']"; // Selettore più robusto
       const nextPageButton = await page.$(nextPageButtonSelector);
@@ -305,41 +327,47 @@ async function runScraperDebug() {
           await nextPageButton.waitForElementState('enabled', { timeout: 5000 });
 
           await nextPageButton.click();
-          console.log(`➡️ Clicked the "Next Page" button to go to page ${pageNumber + 1}.`);
+          logger.info(`➡️ Cliccato il pulsante "Pagina successiva" per andare alla pagina ${pageNumber + 1}.`);
           pageNumber++; // Increment the page number for the next iteration
           await page.waitForTimeout(getRandomDelay(1000, 3000)); // Wait for the new page to load (reduced)
         } catch (clickError) {
-          console.warn(`⚠️ Could not click the "Next Page" button on page ${pageNumber}:`, clickError.message);
-          console.log("🛑 End of pagination (button not clickable or no longer available).");
+          logger.warn(`⚠️ Could not click the "Next Page" button on page ${pageNumber}:`, clickError.message);
+          logger.info("🛑 End of pagination (button not clickable or no longer available).");
+          errorsEncountered++;
           break; // Interrompi se il pulsante non è cliccabile o scompare
         }
       } else {
-        console.log("🛑 'Next Page' button not found. End of pagination.");
+        logger.info("🛑 'Next Page' button not found. End of pagination.");
         // Debugging: Print HTML of the pagination area if button not found
         try {
             const paginationHtml = await page.evaluate(() => {
                 const navElement = document.querySelector('nav[aria-label="Paginazione"]'); // Assuming pagination is in a nav with this aria-label
                 return navElement ? navElement.outerHTML : 'Pagination nav element not found.';
             });
-            console.log("DEBUG: HTML della sezione paginazione (selettore nav[aria-label='Paginazione']):\n", paginationHtml);
+            logger.info("DEBUG: HTML della sezione paginazione (selettore nav[aria-label='Paginazione']):\n", paginationHtml);
         } catch (htmlError) {
-            console.error("DEBUG: Errore durante l'estrazione dell'HTML della paginazione:", htmlError.message);
+            logger.error("DEBUG: Errore durante l'estrazione dell'HTML della paginazione:", htmlError.message);
+            errorsEncountered++;
         }
         break; // Stop if the button is not found
       }
     }
 
-    console.log(`\n--- Debug completed. Total ads processed: ${totalListingsScraped}. Check the console output for results. ---`);
+    logger.info(`\n--- Debug completed. ---`);
+    logger.info(`📊 Report Finale:`);
+    logger.info(`   - Annunci totali elaborati: ${totalListingsScraped}`);
+    logger.info(`   - Errori riscontrati: ${errorsEncountered}`);
 
   } catch (err) {
-    console.error('❌ Critical error in debug scraper:', err.message);
+    logger.error('❌ Errore critico nello scraper di debug:', err.message);
+    errorsEncountered++; // Conta anche gli errori critici
   } finally {
     if (browser) {
       await browser.close();
-      console.log('🚪 Browser closed.');
+      logger.info('🚪 Browser chiuso.');
     }
   }
 }
 
-// Run the debug scraper
-runScraperDebug().catch(err => console.error('❌ Unhandled error:', err));
+// Esegui lo scraper di debug
+runScraperDebug().catch(err => logger.error('❌ Unhandled error:', err));
