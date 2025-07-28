@@ -159,7 +159,8 @@ async function runScraperDebug() {
       logger.info(`🌐 Navigazione alla pagina ${pageNumber}: ${currentPageUrl}...`);
       
       try {
-        await page.goto(currentPageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // Aumento del timeout a 90 secondi e attesa di 'networkidle'
+        await page.goto(currentPageUrl, { waitUntil: 'networkidle', timeout: 90000 }); 
         logger.info(`✅ Pagina ${pageNumber} caricata: ${currentPageUrl}`);
       } catch (navigationError) {
         logger.error(`❌ Errore di navigazione alla pagina ${pageNumber}:`, navigationError.message);
