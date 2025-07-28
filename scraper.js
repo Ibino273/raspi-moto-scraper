@@ -78,81 +78,6 @@ async function runScraperDebug() {
 
     const page = await context.newPage();
 
-    // --- Gestione del riquadro dei cookie (Strategia più robusta con contenitore) ---
-    let cookieHandled = false;
-    try {
-      // Attendi il contenitore del popup dei cookie
-      const cookieContainer = await page.waitForSelector('div.didomi-popup-container', { timeout: 7000, state: 'visible' });
-      
-      if (cookieContainer) {
-        logger.info("✅ Cookie: Riquadro cookie rilevato. Tentativo di chiusura...");
-        
-        // Tentativo 1: Clicca "Continua senza accettare" all'interno del contenitore
-        try {
-          const continueButton = await cookieContainer.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 3000, state: 'visible' });
-          if (continueButton) {
-            await continueButton.click();
-            logger.info("✅ Cookie: Cliccato 'Continua senza accettare'.");
-            cookieHandled = true;
-          }
-        } catch (err1) {
-          logger.warn("⚠️ Cookie: 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare...");
-        }
-
-        if (!cookieHandled) {
-          // Tentativo 2: Clicca "Accetta" all'interno del contenitore
-          try {
-            const acceptButton = await cookieContainer.waitForSelector('button:has-text("Accetta")', { timeout: 3000, state: 'visible' });
-            if (acceptButton) {
-              await acceptButton.click();
-              logger.info("✅ Cookie: Cliccato 'Accetta'.");
-              cookieHandled = true;
-            }
-          } catch (err2) {
-            logger.warn("⚠️ Cookie: 'Accetta' non trovato o non cliccabile. Tentativo di chiudere via JS...");
-          }
-        }
-      } else {
-        logger.info("ℹ️ Cookie: Riquadro cookie non rilevato dopo l'attesa iniziale.");
-        cookieHandled = true; // Se non c'è il container, consideriamo gestito
-      }
-    } catch (containerErr) {
-      logger.info("⚠️ Cookie: Contenitore principale dei cookie non apparso. Continuo lo scraping...");
-      cookieHandled = false; // Non è stato gestito tramite click
-    }
-
-    if (!cookieHandled) {
-      try {
-        // Tentativo 3: Rimuovi l'overlay dei cookie via JavaScript
-        await page.evaluate(() => {
-          const dialog = document.querySelector('.didomi-popup-open'); // Classe comune per il body quando il popup è aperto
-          if (dialog) {
-            dialog.style.overflow = 'auto'; // Ripristina lo scroll
-          }
-          const cookieBanner = document.getElementById('didomi-host'); // ID comune del banner
-          if (cookieBanner) {
-            cookieBanner.remove();
-          }
-          const cookieOverlay = document.querySelector('.didomi-popup-backdrop'); // Selettore per l'overlay
-          if (cookieOverlay) {
-            cookieOverlay.remove();
-          }
-          // Potrebbe esserci anche un elemento che blocca lo scroll del body
-          document.body.style.overflow = 'auto'; 
-        });
-        logger.info("✅ Cookie: Rimosso l'overlay via JavaScript.");
-        cookieHandled = true;
-      } catch (err3) {
-        logger.error("❌ Cookie: Errore durante la rimozione dell'overlay via JavaScript:", err3.message);
-        errorsEncountered++;
-      }
-    }
-
-    if (!cookieHandled) {
-      logger.warn("⚠️ Cookie: Impossibile gestire la finestra dei cookie. Potrebbe bloccare lo scraping.");
-    }
-    // --- Fine gestione cookie ---
-
     // Ciclo principale per la paginazione
     while (pageNumber <= MAX_PAGES_TO_SCRAPE && totalListingsScraped < MAX_TOTAL_LISTINGS_DEBUG) {
       const currentPageUrl = pageNumber === 1 ? BASE_URL : `${BASE_URL}?o=${pageNumber}`;
@@ -168,6 +93,83 @@ async function runScraperDebug() {
         pageNumber++; // Prova la prossima pagina anche in caso di errore di navigazione
         continue; // Passa alla prossima iterazione del ciclo while
       }
+
+      // --- Gestione del riquadro dei cookie (Strategia più robusta con contenitore) ---
+      // Questo blocco ora viene eseguito per OGNI pagina caricata
+      let cookieHandled = false;
+      try {
+        // Attendi il contenitore del popup dei cookie
+        const cookieContainer = await page.waitForSelector('div.didomi-popup-container', { timeout: 7000, state: 'visible' });
+        
+        if (cookieContainer) {
+          logger.info("✅ Cookie: Riquadro cookie rilevato. Tentativo di chiusura...");
+          
+          // Tentativo 1: Clicca "Continua senza accettare" all'interno del contenitore
+          try {
+            const continueButton = await cookieContainer.waitForSelector('span.didomi-continue-without-agreeing', { timeout: 3000, state: 'visible' });
+            if (continueButton) {
+              await continueButton.click();
+              logger.info("✅ Cookie: Cliccato 'Continua senza accettare'.");
+              cookieHandled = true;
+            }
+          } catch (err1) {
+            logger.warn("⚠️ Cookie: 'Continua senza accettare' non trovato o non cliccabile. Tentativo di accettare...");
+          }
+
+          if (!cookieHandled) {
+            // Tentativo 2: Clicca "Accetta" all'interno del contenitore
+            try {
+              const acceptButton = await cookieContainer.waitForSelector('button:has-text("Accetta")', { timeout: 3000, state: 'visible' });
+              if (acceptButton) {
+                await acceptButton.click();
+                logger.info("✅ Cookie: Cliccato 'Accetta'.");
+                cookieHandled = true;
+              }
+            } catch (err2) {
+              logger.warn("⚠️ Cookie: 'Accetta' non trovato o non cliccabile. Tentativo di chiudere via JS...");
+            }
+          }
+        } else {
+          logger.info("ℹ️ Cookie: Riquadro cookie non rilevato dopo l'attesa iniziale.");
+          cookieHandled = true; // Se non c'è il container, consideriamo gestito
+        }
+      } catch (containerErr) {
+        logger.info("⚠️ Cookie: Contenitore principale dei cookie non apparso. Continuo lo scraping...");
+        cookieHandled = false; // Non è stato gestito tramite click
+      }
+
+      if (!cookieHandled) {
+        try {
+          // Tentativo 3: Rimuovi l'overlay dei cookie via JavaScript
+          await page.evaluate(() => {
+            const dialog = document.querySelector('.didomi-popup-open'); // Classe comune per il body quando il popup è aperto
+            if (dialog) {
+              dialog.style.overflow = 'auto'; // Ripristina lo scroll
+            }
+            const cookieBanner = document.getElementById('didomi-host'); // ID comune del banner
+            if (cookieBanner) {
+              cookieBanner.remove();
+            }
+            const cookieOverlay = document.querySelector('.didomi-popup-backdrop'); // Selettore per l'overlay
+            if (cookieOverlay) {
+              cookieOverlay.remove();
+            }
+            // Potrebbe esserci anche un elemento che blocca lo scroll del body
+            document.body.style.overflow = 'auto'; 
+          });
+          logger.info("✅ Cookie: Rimosso l'overlay via JavaScript.");
+          cookieHandled = true;
+        } catch (err3) {
+          logger.error("❌ Cookie: Errore durante la rimozione dell'overlay via JavaScript:", err3.message);
+          errorsEncountered++;
+        }
+      }
+
+      if (!cookieHandled) {
+        logger.warn("⚠️ Cookie: Impossibile gestire la finestra dei cookie. Potrebbe bloccare lo scraping.");
+      }
+      // --- Fine gestione cookie ---
+
 
       logger.info(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
       logger.info("--- Tentativo di estrazione annunci dalla pagina principale ---");
