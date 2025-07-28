@@ -158,40 +158,35 @@ async function runScraperDebug() {
               const parsedFeatures = {};
 
               if (mainDataSection) {
-                // Cerca la UL all'interno della section.main-data
-                const datiPrincipaliContainer = await mainDataSection.$('ul.feature-list_feature-list__jDU2M');
+                // Cerca direttamente gli elementi li all'interno della section.main-data
+                // Non usiamo più ul.feature-list_feature-list__jDU2M
+                const featureItems = await mainDataSection.$$('li.feature-list_feature__gAyqB');
+                for (const item of featureItems) {
+                  const labelElement = await item.$('span:first-child'); // Assumiamo che la label sia il primo span
+                  const valueElement = await item.$('span.feature-list_value__SZDpz'); // Assumiamo che il valore sia lo span con questa classe
 
-                if (datiPrincipaliContainer) {
-                  const featureItems = await datiPrincipaliContainer.$$('li.feature-list_feature__gAyqB');
-                  for (const item of featureItems) {
-                    const labelElement = await item.$('span:first-child'); // Assumiamo che la label sia il primo span
-                    const valueElement = await item.$('span.feature-list_value__SZDpz'); // Assumiamo che il valore sia lo span con questa classe
+                  const label = (await labelElement?.textContent())?.trim();
+                  const value = (await valueElement?.textContent())?.trim();
 
-                    const label = (await labelElement?.textContent())?.trim();
-                    const value = (await valueElement?.textContent())?.trim();
-
-                    if (label && value) {
-                      // Normalizza la label per usarla come chiave (es. "Marca" -> "marca", "Km" -> "km")
-                      const normalizedLabel = label.toLowerCase().replace(/\s/g, '');
-                      parsedFeatures[normalizedLabel] = value;
-                    }
+                  if (label && value) {
+                    // Normalizza la label per usarla come chiave (es. "Marca" -> "marca", "Km" -> "km")
+                    const normalizedLabel = label.toLowerCase().replace(/\s/g, '');
+                    parsedFeatures[normalizedLabel] = value;
                   }
-                  console.log("Dati Principali Parsed:", parsedFeatures);
-
-                  // Stampa i dati estratti per nome
-                  console.log(`Marca: ${parsedFeatures.marca || 'N/A'}`);
-                  console.log(`Modello: ${parsedFeatures.modello || 'N/A'}`);
-                  console.log(`Anno: ${parsedFeatures.immatricolazione || parsedFeatures.anno || 'N/A'}`); // Usa immatricolazione o anno
-                  console.log(`Km: ${parsedFeatures.km || 'N/A'}`);
-                  console.log(`Cilindrata: ${parsedFeatures.cilindrata || 'N/A'}`);
-                  console.log(`Versione: ${parsedFeatures.versione || 'N/A'}`);
-                  console.log(`Tipo di veicolo: ${parsedFeatures.tipodiveicolo || 'N/A'}`);
-                  console.log(`Iva esposta: ${parsedFeatures.ivaesposta || 'N/A'}`);
-                  console.log(`Immatricolazione: ${parsedFeatures.immatricolazione || 'N/A'}`);
-
-                } else {
-                  console.warn("⚠️ Contenitore UL 'feature-list_feature-list__jDU2M' non trovato all'interno di 'section.main-data'.");
                 }
+                console.log("Dati Principali Parsed:", parsedFeatures);
+
+                // Stampa i dati estratti per nome
+                console.log(`Marca: ${parsedFeatures.marca || 'N/A'}`);
+                console.log(`Modello: ${parsedFeatures.modello || 'N/A'}`);
+                console.log(`Anno: ${parsedFeatures.immatricolazione || parsedFeatures.anno || 'N/A'}`); // Usa immatricolazione o anno
+                console.log(`Km: ${parsedFeatures.km || 'N/A'}`);
+                console.log(`Cilindrata: ${parsedFeatures.cilindrata || 'N/A'}`);
+                console.log(`Versione: ${parsedFeatures.versione || 'N/A'}`);
+                console.log(`Tipo di veicolo: ${parsedFeatures.tipodiveicolo || 'N/A'}`);
+                console.log(`Iva esposta: ${parsedFeatures.ivaesposta || 'N/A'}`);
+                console.log(`Immatricolazione: ${parsedFeatures.immatricolazione || 'N/A'}`);
+
               } else {
                 console.warn("⚠️ Contenitore 'Dati Principali' (section.main-data) non trovato.");
               }
