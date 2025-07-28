@@ -42,7 +42,7 @@ async function runScraperDebug() {
   const BASE_URL = 'https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/';
   let pageNumber = 1;
   const maxPagesToScrape = 3; // Limite massimo di pagine da scansionare: 3 pagine
-  const maxListingsPerRun = 1; // Limite di annunci da scrapare per ogni esecuzione dello script
+  const maxListingsPerRun = 1; // Limite di annunci da scrapare per ogni esecuzione dello script (modificato a 2)
   let totalListingsScraped = 0; // Contatore totale annunci scrapati
 
   try {
@@ -223,7 +223,7 @@ async function runScraperDebug() {
       // --- Pagination Logic ---
       console.log(`\n--- Checking "Next Page" button on Page ${pageNumber} ---`);
       // Nuovo selettore per il pulsante "Pagina successiva"
-      const nextPageButtonSelector = "#layout > main > div:nth-child(2) > div.ListingContainer_layout__paU6c > div > div.ListingContainer_container__Eh3S3 > div.ListingContainer_col__BgYy2.ListingContainer_items__na8UR.col.items > nav > button:nth-child(7)";
+      const nextPageButtonSelector = "button[aria-label='Andare alla prossima pagina']"; // Selettore più robusto
       const nextPageButton = await page.$(nextPageButtonSelector);
 
       if (nextPageButton) {
@@ -243,6 +243,16 @@ async function runScraperDebug() {
         }
       } else {
         console.log("🛑 'Next Page' button not found. End of pagination.");
+        // Debugging: Print HTML of the pagination area if button not found
+        try {
+            const paginationHtml = await page.evaluate(() => {
+                const navElement = document.querySelector('nav[aria-label="Paginazione"]'); // Assuming pagination is in a nav with this aria-label
+                return navElement ? navElement.outerHTML : 'Pagination nav element not found.';
+            });
+            console.log("DEBUG: HTML della sezione paginazione (selettore nav[aria-label='Paginazione']):\n", paginationHtml);
+        } catch (htmlError) {
+            console.error("DEBUG: Errore durante l'estrazione dell'HTML della paginazione:", htmlError.message);
+        }
         break; // Stop if the button is not found
       }
     }
