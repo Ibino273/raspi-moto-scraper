@@ -42,7 +42,7 @@ async function runScraperDebug() {
   const BASE_URL = 'https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/';
   let pageNumber = 1;
   const maxPagesToScrape = 3; // Limite massimo di pagine da scansionare: 3 pagine
-  const maxListingsPerRun = 2; // Limite di annunci da scrapare per ogni esecuzione dello script
+  const maxListingsPerRun = 1; // Limite di annunci da scrapare per ogni esecuzione dello script
   let totalListingsScraped = 0; // Contatore totale annunci scrapati
 
   try {
@@ -222,7 +222,8 @@ async function runScraperDebug() {
 
       // --- Pagination Logic ---
       console.log(`\n--- Checking "Next Page" button on Page ${pageNumber} ---`);
-      const nextPageButtonSelector = "[aria-label='Andare alla prossima pagina'] svg";
+      // Nuovo selettore per il pulsante "Pagina successiva"
+      const nextPageButtonSelector = "#layout > main > div:nth-child(2) > div.ListingContainer_layout__paU6c > div > div.ListingContainer_container__Eh3S3 > div.ListingContainer_col__BgYy2.ListingContainer_items__na8UR.col.items > nav > button:nth-child(7)";
       const nextPageButton = await page.$(nextPageButtonSelector);
 
       if (nextPageButton) {
