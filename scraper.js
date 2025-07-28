@@ -1,4 +1,4 @@
-// scraper.js - Versione per Debug (Analizza 2 annunci per pagina, su 3 pagine)
+// scraper.js - Versione per Debug (Paginazione URL Diretta, 2 annunci per pagina, 3 pagine)
 require('dotenv').config();
 const { chromium } = require('playwright');
 const winston = require('winston'); // Importa winston
@@ -55,10 +55,11 @@ async function withRetry(fn, retries = 3, delay = 1000) {
 async function runScraperDebug() {
   let browser;
   const BASE_URL = config.BASE_URL; // Caricato da config.js
+  const MAX_PAGES_TO_SCRAPE = config.MAX_PAGES_TO_SCRAPE; // Caricato da config.js
+  const MAX_LISTINGS_PER_PAGE_DEBUG = config.MAX_LISTINGS_PER_PAGE_DEBUG; // Caricato da config.js
+  const MAX_TOTAL_LISTINGS_DEBUG = config.MAX_TOTAL_LISTINGS_DEBUG; // Caricato da config.js
+  
   let pageNumber = 1;
-  const maxPagesToScrape = config.MAX_PAGES_TO_SCRAPE; // Caricato da config.js
-  const maxListingsPerRun = config.MAX_LISTINGS_PER_PAGE_DEBUG; // Caricato da config.js
-  const maxTotalListingsToScrape = config.MAX_TOTAL_LISTINGS_DEBUG; // Caricato da config.js
   let totalListingsScraped = 0; // Contatore totale annunci scrapati
   let errorsEncountered = 0; // Contatore errori
 
@@ -76,17 +77,6 @@ async function runScraperDebug() {
     });
 
     const page = await context.newPage();
-
-    // Naviga alla prima pagina una sola volta all'inizio
-    logger.info(`🌐 Navigazione alla pagina iniziale: ${BASE_URL}...`);
-    try {
-      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      logger.info(`✅ Pagina ${pageNumber} caricata: ${BASE_URL}`);
-    } catch (navigationError) {
-      logger.error(`❌ Errore di navigazione alla pagina iniziale:`, navigationError.message);
-      errorsEncountered++;
-      return; // Termina se la navigazione fallisce
-    }
 
     // --- Gestione del riquadro dei cookie (Strategia più robusta con contenitore) ---
     let cookieHandled = false;
@@ -163,29 +153,38 @@ async function runScraperDebug() {
     }
     // --- Fine gestione cookie ---
 
-    while (pageNumber <= maxPagesToScrape && totalListingsScraped < maxTotalListingsToScrape) { // Controllo sul numero massimo di annunci per run
-      logger.info(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
+    // Ciclo principale per la paginazione
+    while (pageNumber <= MAX_PAGES_TO_SCRAPE && totalListingsScraped < MAX_TOTAL_LISTINGS_DEBUG) {
+      const currentPageUrl = pageNumber === 1 ? BASE_URL : `${BASE_URL}?o=${pageNumber}`;
+      logger.info(`🌐 Navigazione alla pagina ${pageNumber}: ${currentPageUrl}...`);
+      
+      try {
+        await page.goto(currentPageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        logger.info(`✅ Pagina ${pageNumber} caricata: ${currentPageUrl}`);
+      } catch (navigationError) {
+        logger.error(`❌ Errore di navigazione alla pagina ${pageNumber}:`, navigationError.message);
+        errorsEncountered++;
+        pageNumber++; // Prova la prossima pagina anche in caso di errore di navigazione
+        continue; // Passa alla prossima iterazione del ciclo while
+      }
 
+      logger.info(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
       logger.info("--- Tentativo di estrazione annunci dalla pagina principale ---");
 
       // Estrai tutti i link degli annunci utilizzando il selettore fornito
       const listingLinks = await page.$$('div:nth-of-type(3) a.SmallCard-module_link__hOkzY');
       logger.info(`🔍 Trovati ${listingLinks.length} link di annunci con 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' su questa pagina.`);
 
-      if (listingLinks.length === 0 && pageNumber === 1) {
-        logger.error("❌ Nessun link di annuncio trovato sulla prima pagina. Il selettore 'div:nth-of-type(3) a.SmallCard-module_link__hOkzY' potrebbe essere sbagliato o la pagina è vuota.");
-        errorsEncountered++;
-        break; // Nessun annuncio sulla prima pagina, termina
-      } else if (listingLinks.length === 0 && pageNumber > 1) {
-        logger.info("ℹ️ Nessun annuncio trovato su questa pagina. Fine della paginazione.");
-        break; // Nessun annuncio sulle pagine successive, fine della paginazione
+      if (listingLinks.length === 0) {
+        logger.info("ℹ️ Nessun annuncio trovato su questa pagina. Fine della paginazione o pagina vuota.");
+        break; // Nessun annuncio, termina la paginazione
       }
       
       let annuncioCountOnPage = 0;
-      // Itera su ogni link di annuncio trovato, limitando a `maxListingsPerRun`
+      // Itera su ogni link di annuncio trovato, limitando a `MAX_LISTINGS_PER_PAGE_DEBUG`
       for (const linkElement of listingLinks) {
-        if (annuncioCountOnPage >= maxListingsPerRun || totalListingsScraped >= maxTotalListingsToScrape) {
-          logger.info(`🏁 Raggiunto il limite di ${maxListingsPerRun} annunci per pagina o il limite totale. Arresto l'elaborazione degli annunci su questa pagina.`);
+        if (annuncioCountOnPage >= MAX_LISTINGS_PER_PAGE_DEBUG || totalListingsScraped >= MAX_TOTAL_LISTINGS_DEBUG) {
+          logger.info(`🏁 Raggiunto il limite di ${MAX_LISTINGS_PER_PAGE_DEBUG} annunci per pagina o il limite totale di ${MAX_TOTAL_LISTINGS_DEBUG}. Arresto l'elaborazione degli annunci su questa pagina.`);
           break; // Esci dal ciclo for se il limite per pagina o il limite totale è raggiunto
         }
 
@@ -308,59 +307,10 @@ async function runScraperDebug() {
         await page.waitForTimeout(getRandomDelay(200, 800)); // Reduced to 0.2-0.8 seconds
       }
 
-      // If the limit of ads has been reached within the for loop, we also exit the while loop
-      if (totalListingsScraped >= maxTotalListingsToScrape) {
-        logger.info(`🏁 Raggiunto il limite di ${maxTotalListingsToScrape} annunci. Arresto lo scraping.`);
-        break;
-      }
-
-      // --- Pagination Logic ---
-      logger.info(`\n--- Controllo pulsante "Pagina successiva" sulla Pagina ${pageNumber} ---`);
-      // Nuovo selettore per il pulsante "Pagina successiva"
-      const nextPageButtonSelector = "button[aria-label='Andare alla prossima pagina']"; // Selettore più robusto
-      const nextPageButton = await page.$(nextPageButtonSelector);
-
-      if (nextPageButton) {
-        try {
-          // Ensure the button is visible and enabled before clicking
-          await nextPageButton.waitForElementState('visible', { timeout: 5000 });
-          await nextPageButton.waitForElementState('enabled', { timeout: 5000 });
-
-          const currentUrl = page.url(); // Salva l'URL corrente prima del click
-
-          await nextPageButton.click();
-          logger.info(`➡️ Cliccato il pulsante "Pagina successiva" per andare alla pagina ${pageNumber + 1}.`);
-          
-          // Attendi che l'URL cambi per la nuova pagina
-          const expectedNextPageUrlPart = `?o=${pageNumber + 1}`;
-          await page.waitForURL((url) => url.toString().includes(expectedNextPageUrlPart) || url.toString() !== currentUrl, { timeout: 30000 }); // Attendi fino a 30 secondi per il cambio URL
-
-          pageNumber++; // Incrementa il numero di pagina per la prossima iterazione
-          // Rimosso il getRandomDelay qui, poiché waitForURL è più preciso
-        } catch (clickError) {
-          logger.warn(`⚠️ Impossibile cliccare il pulsante "Pagina successiva" sulla pagina ${pageNumber}:`, clickError.message);
-          logger.info("🛑 Fine della paginazione (pulsante non cliccabile o non più disponibile).");
-          errorsEncountered++;
-          break; // Interrompi se il pulsante non è cliccabile o scompare
-        }
-      } else {
-        logger.info("🛑 'Next Page' button not found. End of pagination.");
-        // Debugging: Print HTML of the pagination area if button not found
-        try {
-            const paginationHtml = await page.evaluate(() => {
-                const navElement = document.querySelector('nav[aria-label="Paginazione"]'); // Assuming pagination is in a nav with this aria-label
-                return navElement ? navElement.outerHTML : 'Pagination nav element not found.';
-            });
-            logger.info("DEBUG: HTML della sezione paginazione (selettore nav[aria-label='Paginazione']):\n", paginationHtml);
-        } catch (htmlError) {
-            logger.error("DEBUG: Errore durante l'estrazione dell'HTML della paginazione:", htmlError.message);
-            errorsEncountered++;
-        }
-        break; // Stop if the button is not found
-      }
+      pageNumber++; // Passa alla prossima pagina
     }
 
-    logger.info(`\n--- Debug completed. ---`);
+    logger.info(`\n--- Debug completato. ---`);
     logger.info(`📊 Report Finale:`);
     logger.info(`   - Annunci totali elaborati: ${totalListingsScraped}`);
     logger.info(`   - Errori riscontrati: ${errorsEncountered}`);
