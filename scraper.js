@@ -42,9 +42,9 @@ async function runScraperDebug() {
   const BASE_URL = 'https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/';
 
   try {
-    // Avvia il browser Chromium in modalità non headless per vedere cosa succede
+    // Avvia il browser Chromium in modalità headless per maggiore velocità
     browser = await chromium.launch({
-      headless: false, // Impostato su false per visualizzare il browser
+      headless: true, // Impostato su true per velocizzare
       executablePath: '/usr/bin/chromium-browser',
       args: ['--start-fullscreen']
     });
@@ -65,10 +65,10 @@ async function runScraperDebug() {
       return; // Termina se la navigazione fallisce
     }
 
-    // --- Rimosso il blocco di gestione dei cookie come richiesto ---
+    // --- Rimosso il blocco di gestione dei cookie ---
 
     // Attendi un attimo per assicurarti che la pagina sia completamente renderizzata
-    await page.waitForTimeout(3000); // 3 secondi di attesa
+    await page.waitForTimeout(1000); // Ridotto a 1 secondo
 
     console.log("--- Tentativo di estrazione annunci dalla pagina principale ---");
 
@@ -89,7 +89,7 @@ async function runScraperDebug() {
         console.log(`Link annuncio: ${fullUrl || 'N/A'}`);
 
         try {
-          // --- Rimossa la raccolta dati di Titolo, Prezzo e Immagine dalla pagina principale come richiesto ---
+          // --- Rimossa la raccolta dati di Titolo, Prezzo e Immagine dalla pagina principale ---
           // Questi dati verranno raccolti dalla pagina di dettaglio.
 
           if (fullUrl) {
@@ -174,7 +174,7 @@ async function runScraperDebug() {
           console.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.message);
         }
         // Aggiungi un ritardo tra l'elaborazione di un annuncio e il successivo
-        await page.waitForTimeout(getRandomDelay(1000, 3000));
+        await page.waitForTimeout(getRandomDelay(500, 1500)); // Ridotto a 0.5-1.5 secondi
       }
     }
 
