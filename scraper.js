@@ -1,4 +1,4 @@
-// scraper.js - Versione per Debug (Analizza tutti gli annunci e gestisce la paginazione con click)
+// scraper.js - Versione per Debug (Analizza 2 annunci per pagina, su 3 pagine)
 require('dotenv').config();
 const { chromium } = require('playwright');
 
@@ -41,14 +41,14 @@ async function runScraperDebug() {
   let browser;
   const BASE_URL = 'https://www.subito.it/annunci-piemonte/vendita/moto-e-scooter/';
   let pageNumber = 1;
-  const maxPagesToScrape = 5; // Limite massimo di pagine da scansionare per evitare cicli infiniti
-  const maxListingsToScrape = 50; // Nuovo limite massimo di annunci da scrapare
+  const maxPagesToScrape = 3; // Limite massimo di pagine da scansionare: 3 pagine
+  const maxListingsPerRun = 2; // Limite di annunci da scrapare per ogni esecuzione dello script
   let totalListingsScraped = 0; // Contatore totale annunci scrapati
 
   try {
     // Avvia il browser Chromium in modalità headless per maggiore velocità
     browser = await chromium.launch({
-      headless: true, // Impostato su true per velocizzare
+      headless: true, // Impostato su true per velocizzare, significa che non visualizza
       executablePath: '/usr/bin/chromium-browser',
       args: ['--start-fullscreen']
     });
@@ -72,9 +72,7 @@ async function runScraperDebug() {
 
     // --- Rimosso il blocco di gestione dei cookie ---
 
-    // Rimosso il waitForTimeout(1000) qui per velocizzare
-
-    while (pageNumber <= maxPagesToScrape && totalListingsScraped < maxListingsToScrape) { // Aggiunto controllo sul numero massimo di annunci
+    while (pageNumber <= maxPagesToScrape && totalListingsScraped < maxListingsPerRun * maxPagesToScrape) { // Controllo sul numero massimo di annunci per run
       console.log(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
 
       console.log("--- Tentativo di estrazione annunci dalla pagina principale ---");
@@ -92,11 +90,11 @@ async function runScraperDebug() {
       }
       
       let annuncioCountOnPage = 0;
-      // Itera su ogni link di annuncio trovato
+      // Itera su ogni link di annuncio trovato, limitando a `maxListingsPerRun`
       for (const linkElement of listingLinks) {
-        if (totalListingsScraped >= maxListingsToScrape) { // Controlla il limite prima di elaborare ogni annuncio
-          console.log(`🏁 Raggiunto il limite di ${maxListingsToScrape} annunci. Arresto lo scraping.`);
-          break; // Esci dal ciclo for se il limite è raggiunto
+        if (annuncioCountOnPage >= maxListingsPerRun || totalListingsScraped >= maxListingsPerRun * maxPagesToScrape) {
+          console.log(`🏁 Raggiunto il limite di ${maxListingsPerRun} annunci per pagina o il limite totale. Arresto l'elaborazione degli annunci su questa pagina.`);
+          break; // Esci dal ciclo for se il limite per pagina o il limite totale è raggiunto
         }
 
         annuncioCountOnPage++;
@@ -212,53 +210,53 @@ async function runScraperDebug() {
         } catch (itemError) {
           console.error(`❌ Errore durante l'estrazione dei dettagli dall'annuncio ${fullUrl || 'sconosciuto'}:`, itemError.message);
         }
-        // Aggiungi un ritardo tra l'elaborazione di un annuncio e il successivo
-        await page.waitForTimeout(getRandomDelay(200, 800)); // Ridotto a 0.2-0.8 secondi
+        // Add a delay between processing each ad
+        await page.waitForTimeout(getRandomDelay(200, 800)); // Reduced to 0.2-0.8 seconds
       }
 
-      // Se il limite di annunci è stato raggiunto all'interno del ciclo for, usciamo anche dal while
-      if (totalListingsScraped >= maxListingsToScrape) {
-        console.log(`🏁 Raggiunto il limite di ${maxListingsToScrape} annunci. Arresto lo scraping.`);
+      // If the limit of ads has been reached within the for loop, we also exit the while loop
+      if (totalListingsScraped >= maxListingsPerRun * maxPagesToScrape) {
+        console.log(`🏁 Reached the limit of ${maxListingsPerRun * maxPagesToScrape} ads. Stopping scraping.`);
         break;
       }
 
-      // --- Logica di Paginazione ---
-      console.log(`\n--- Controllo pulsante "Pagina successiva" sulla Pagina ${pageNumber} ---`);
-      const nextPageButtonSelector = "[aria-label='Andare alla prossima pagina']";
+      // --- Pagination Logic ---
+      console.log(`\n--- Checking "Next Page" button on Page ${pageNumber} ---`);
+      const nextPageButtonSelector = "[aria-label='Andare alla prossima pagina'] svg";
       const nextPageButton = await page.$(nextPageButtonSelector);
 
       if (nextPageButton) {
         try {
-          // Assicurati che il pulsante sia visibile e abilitato prima di cliccare
+          // Ensure the button is visible and enabled before clicking
           await nextPageButton.waitForElementState('visible', { timeout: 5000 });
           await nextPageButton.waitForElementState('enabled', { timeout: 5000 });
 
           await nextPageButton.click();
-          console.log(`➡️ Cliccato il pulsante "Pagina successiva" per andare alla pagina ${pageNumber + 1}.`);
-          pageNumber++; // Incrementa il numero di pagina per la prossima iterazione
-          await page.waitForTimeout(getRandomDelay(1000, 3000)); // Attendi il caricamento della nuova pagina (ridotto)
+          console.log(`➡️ Clicked the "Next Page" button to go to page ${pageNumber + 1}.`);
+          pageNumber++; // Increment the page number for the next iteration
+          await page.waitForTimeout(getRandomDelay(1000, 3000)); // Wait for the new page to load (reduced)
         } catch (clickError) {
-          console.warn(`⚠️ Impossibile cliccare il pulsante "Pagina successiva" sulla pagina ${pageNumber}:`, clickError.message);
-          console.log("🛑 Fine della paginazione (pulsante non cliccabile o non più disponibile).");
-          break; // Interrompi se il pulsante non è cliccabile o scompare
+          console.warn(`⚠️ Could not click the "Next Page" button on page ${pageNumber}:`, clickError.message);
+          console.log("🛑 End of pagination (button not clickable or no longer available).");
+          break; // Stop if the button is not clickable or disappears
         }
       } else {
-        console.log("🛑 Pulsante 'Pagina successiva' non trovato. Fine della paginazione.");
-        break; // Interrompi se il pulsante non è trovato
+        console.log("🛑 'Next Page' button not found. End of pagination.");
+        break; // Stop if the button is not found
       }
     }
 
-    console.log(`\n--- Debug completato. Totale annunci elaborati: ${totalListingsScraped}. Controlla l'output della console per i risultati. ---`);
+    console.log(`\n--- Debug completed. Total ads processed: ${totalListingsScraped}. Check the console output for results. ---`);
 
   } catch (err) {
-    console.error('❌ Errore critico nello scraper di debug:', err.message);
+    console.error('❌ Critical error in debug scraper:', err.message);
   } finally {
     if (browser) {
       await browser.close();
-      console.log('🚪 Browser chiuso.');
+      console.log('🚪 Browser closed.');
     }
   }
 }
 
-// Esegui lo scraper di debug
-runScraperDebug().catch(err => console.error('❌ Errore non gestito:', err));
+// Run the debug scraper
+runScraperDebug().catch(err => console.error('❌ Unhandled error:', err));
