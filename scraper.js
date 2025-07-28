@@ -99,8 +99,7 @@ async function runScraperDebug() {
               await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
               console.log(`✅ Pagina caricata per: ${fullUrl}`); // Usa fullUrl qui, il titolo sarà estratto dopo
 
-              // Estrazione dati dalla pagina di dettaglio con i NUOVI selettori forniti
-              // Nuovo selettore per Titolo (h1)
+              // Estrazione dati dalla pagina di dettaglio
               const titoloElement = await detailPage.$('h1');
               const titolo = (await titoloElement?.textContent())?.trim();
               console.log(`Titolo: ${titolo || 'N/A'}`);
@@ -125,7 +124,7 @@ async function runScraperDebug() {
               const prezzoElement = await detailPage.$('p.AdInfo_price__flXgp');
               const prezzoText = (await prezzoElement?.textContent())?.trim();
               
-              // CORREZIONE: Gestione del prezzo per formato italiano anche per il dettaglio
+              // CORREZIONE: Gestione del prezzo per formato italiano
               let prezzoParsed = null;
               if (prezzoText) {
                   const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
@@ -147,19 +146,43 @@ async function runScraperDebug() {
               const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null; // Pulisce e converte in numero
               console.log(`Cilindrata: ${cilindrata || 'N/A'}`);
 
-              // Selettori di Marca e Modello già presenti
-              const marcaElement = await detailPage.$('li:nth-of-type(1) span.feature-list_value__SZDpz');
-              const marca = (await marcaElement?.textContent())?.trim();
-              console.log(`Marca: ${marca || 'N/A'}`);
-
-              const modelloElement = await detailPage.$('li:nth-of-type(2) span.feature-list_value__SZDpz');
-              const modello = (await modelloElement?.textContent())?.trim();
-              console.log(`Modello: ${modello || 'N/A'}`);
-
               const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
               const likes = (await likesElement?.textContent())?.trim();
               console.log(`Likes: ${likes || 'N/A'}`);
 
+              // --- NUOVA LOGICA PER I "DATI PRINCIPALI" VARIABILI ---
+              console.log("--- Estrazione Dati Principali (Marca, Modello, ecc.) ---");
+              const datiPrincipaliContainer = await detailPage.$('ul.feature-list_feature-list__jDU2M');
+              const parsedFeatures = {};
+
+              if (datiPrincipaliContainer) {
+                const featureItems = await datiPrincipaliContainer.$$('li.feature-list_feature__gAyqB');
+                for (const item of featureItems) {
+                  const labelElement = await item.$('span:first-child'); // Assumiamo che la label sia il primo span
+                  const valueElement = await item.$('span.feature-list_value__SZDpz'); // Assumiamo che il valore sia lo span con questa classe
+
+                  const label = (await labelElement?.textContent())?.trim();
+                  const value = (await valueElement?.textContent())?.trim();
+
+                  if (label && value) {
+                    // Normalizza la label per usarla come chiave (es. "Marca" -> "marca", "Km" -> "km")
+                    const normalizedLabel = label.toLowerCase().replace(/\s/g, '');
+                    parsedFeatures[normalizedLabel] = value;
+                  }
+                }
+                console.log("Dati Principali Parsed:", parsedFeatures);
+
+                // Ora puoi accedere ai dati per nome, indipendentemente dalla loro posizione
+                console.log(`Marca (da Dati Principali): ${parsedFeatures.marca || 'N/A'}`);
+                console.log(`Modello (da Dati Principali): ${parsedFeatures.modello || 'N/A'}`);
+                // Puoi aggiungere altri campi qui se li trovi nei "Dati Principali"
+                console.log(`Anno (da Dati Principali): ${parsedFeatures.anno || 'N/A'}`); // Esempio
+                console.log(`Km (da Dati Principali): ${parsedFeatures.km || 'N/A'}`); // Esempio
+                console.log(`Cilindrata (da Dati Principali): ${parsedFeatures.cilindrata || 'N/A'}`); // Esempio
+
+              } else {
+                console.warn("⚠️ Contenitore 'Dati Principali' non trovato con selettore 'ul.feature-list_feature-list__jDU2M'.");
+              }
 
             } catch (detailPageError) {
               console.error(`❌ Errore durante lo scraping della pagina per "${fullUrl}":`, detailPageError.message);
