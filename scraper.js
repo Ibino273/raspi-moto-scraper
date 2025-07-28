@@ -48,7 +48,7 @@ async function runScraperDebug() {
   try {
     // Avvia il browser Chromium in modalità headless per maggiore velocità
     browser = await chromium.launch({
-      headless: true, // Impostato su true per velocizzare, significa che non visualizza
+      headless: false, // Impostato su true per velocizzare, significa che non visualizza
       executablePath: '/usr/bin/chromium-browser',
       args: ['--start-fullscreen']
     });
