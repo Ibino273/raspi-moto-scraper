@@ -52,7 +52,7 @@ function parseSubitoDate(input) {
     return now.toISOString();
   }
 
-  const match = input.match(/(\d{1,2}) (\w{3}) alle (\d{2}:\d{2})/);
+  const match = input.match(/(\d{1,2}) (\w{3}) (?:all'|alle) (\d{2}:\d{2})/);
   if (!match) return null;
   const [_, day, monthAbbr, time] = match;
   const month = months[monthAbbr];
