@@ -28,17 +28,37 @@ const userAgents = [
 
 const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
+// Funzione di parsing della data aggiornata
 function parseSubitoDate(input) {
   const months = {
     gen: '01', feb: '02', mar: '03', apr: '04', mag: '05', giu: '06',
     lug: '07', ago: '08', set: '09', ott: '10', nov: '11', dic: '12'
   };
+  const now = new Date();
+
+  if (input?.toLowerCase().includes('oggi')) {
+    const hourMatch = input.match(/(\d{2}:\d{2})/);
+    if (!hourMatch) return null;
+    const [hours, minutes] = hourMatch[1].split(':');
+    now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return now.toISOString();
+  }
+
+  if (input?.toLowerCase().includes('ieri')) {
+    const hourMatch = input.match(/(\d{2}:\d{2})/);
+    if (!hourMatch) return null;
+    now.setDate(now.getDate() - 1);
+    const [hours, minutes] = hourMatch[1].split(':');
+    now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return now.toISOString();
+  }
+
   const match = input.match(/(\d{1,2}) (\w{3}) alle (\d{2}:\d{2})/);
   if (!match) return null;
   const [_, day, monthAbbr, time] = match;
   const month = months[monthAbbr];
   if (!month) return null;
-  const year = new Date().getFullYear();
+  const year = now.getFullYear();
   return `${year}-${month}-${day.padStart(2, '0')}T${time}:00`;
 }
 
@@ -78,7 +98,7 @@ async function runScraper() {
         pageNumber++;
         continue;
       }
-
+      
       const listingLinks = await page.$$('div:nth-of-type(3) a.SmallCard-module_link__hOkzY');
       logger.info(`🔍 Trovati ${listingLinks.length} link di annunci su questa pagina.`);
       if (listingLinks.length === 0) {
