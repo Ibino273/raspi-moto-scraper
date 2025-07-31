@@ -1,19 +1,14 @@
-// updated_scraper.js - Versione con integrazione Supabase
-// Questo file combina lo scraper originale con l'inserimento dei dati nella tabella
-// "moto_listings" su Supabase. È pensato per essere una sostituzione drop‑in di
-// scraper.js: basta copiare questo codice nella repo (sovrascrivendo
-// scraper.js) e assicurarsi di avere configurato correttamente le variabili
-// d'ambiente SUPABASE_URL e SUPABASE_API_KEY.
-
+// scraper.js completo con logger, configurazione e correzione data pubblicazione
 require('dotenv').config();
 const { chromium } = require('playwright');
 const winston = require('winston');
 const config = require('./config');
-
-// Importa il client Supabase
 const { createClient } = require('@supabase/supabase-js');
 
-// Configurazione del logger
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_API_KEY = process.env.SUPABASE_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(SUPABASE_URL, SUPABASE_API_KEY);
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -26,25 +21,26 @@ const logger = winston.createLogger({
   ],
 });
 
-// Recupera le variabili d'ambiente per Supabase. Puoi usare SUPABASE_API_KEY oppure
-// SUPABASE_SERVICE_ROLE_KEY a seconda di come hai configurato il tuo .env.
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_API_KEY = process.env.SUPABASE_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// Crea il client Supabase
-const supabase = createClient(SUPABASE_URL, SUPABASE_API_KEY);
-
 const userAgents = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/109.0.1518.78',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/109.0',
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-  'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5414.86 Mobile Safari/537.36'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...',
+  'Mozilla/5.0 (X11; Linux x86_64)...'
 ];
 
 const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+function parseSubitoDate(input) {
+  const months = {
+    gen: '01', feb: '02', mar: '03', apr: '04', mag: '05', giu: '06',
+    lug: '07', ago: '08', set: '09', ott: '10', nov: '11', dic: '12'
+  };
+  const match = input.match(/(\d{1,2}) (\w{3}) alle (\d{2}:\d{2})/);
+  if (!match) return null;
+  const [_, day, monthAbbr, time] = match;
+  const month = months[monthAbbr];
+  if (!month) return null;
+  const year = new Date().getFullYear();
+  return `${year}-${month}-${day.padStart(2, '0')}T${time}:00`;
+}
 
 async function runScraper() {
   let browser;
@@ -83,14 +79,6 @@ async function runScraper() {
         continue;
       }
 
-      // gestione cookie identica all’originale (omessa qui per brevità, copia dal tuo file se necessaria)
-      try {
-        // Gestione popup cookie (vedi codice originale). In caso di problemi, il flusso continuerà.
-      } catch (err) {
-        logger.warn('⚠️ Errore nella gestione dei cookie: ' + err.message);
-      }
-
-      logger.info(`\n--- Inizio elaborazione Pagina #${pageNumber} (Annunci totali finora: ${totalListingsScraped}) ---`);
       const listingLinks = await page.$$('div:nth-of-type(3) a.SmallCard-module_link__hOkzY');
       logger.info(`🔍 Trovati ${listingLinks.length} link di annunci su questa pagina.`);
       if (listingLinks.length === 0) {
@@ -118,9 +106,9 @@ async function runScraper() {
           await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
           logger.info(`✅ Pagina di dettaglio caricata: ${fullUrl}`);
 
-          // Estrazione dei campi principali
           const titolo = (await (await detailPage.$('h1'))?.textContent())?.trim();
-          const data = (await (await detailPage.$('span.index-module_insertion-date__MU4AZ'))?.textContent())?.trim();
+          const dataText = (await (await detailPage.$('span.index-module_insertion-date__MU4AZ'))?.textContent())?.trim();
+          const data_pubblicazione = parseSubitoDate(dataText);
           const kilometriText = (await (await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz'))?.textContent())?.trim();
           const kilometri = kilometriText ? parseInt(kilometriText.replace(/\D/g, '')) : null;
           const prezzoText = (await (await detailPage.$('p.AdInfo_price__flXgp'))?.textContent())?.trim();
@@ -133,7 +121,6 @@ async function runScraper() {
           const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null;
           const likesText = (await (await detailPage.$('span.Heart_counter-wrapper__number__Xltfo'))?.textContent())?.trim();
 
-          // Sezione main-data con marca, modello, km ecc.
           const mainDataSection = await detailPage.$('section.main-data');
           const parsedFeatures = {};
           if (mainDataSection) {
@@ -148,7 +135,6 @@ async function runScraper() {
             }
           }
 
-          // Prepara il record da inserire nella tabella Supabase
           const record = {
             marca: parsedFeatures.marca || null,
             modello: parsedFeatures.modello || null,
@@ -160,12 +146,11 @@ async function runScraper() {
               ? parseInt(parsedFeatures.km.replace(/\D/g, ''))
               : kilometri,
             likes: likesText ? parseInt(likesText.replace(/\D/g, '')) : null,
-            data_pubblicazione: data || null,
+            data_pubblicazione,
             link_annuncio: fullUrl,
             created_at: new Date().toISOString(),
           };
 
-          // Inserisce il record in Supabase
           const { error: insertError } = await supabase.from('moto_listings').insert([record]);
           if (insertError) {
             logger.error(`❌ Errore inserimento Supabase: ${insertError.message}`);
@@ -196,5 +181,4 @@ async function runScraper() {
   }
 }
 
-// Esegui lo scraper
 runScraper().catch(err => logger.error('❌ Unhandled error: ' + err.message));
