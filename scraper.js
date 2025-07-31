@@ -28,7 +28,6 @@ const userAgents = [
 
 const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Funzione di parsing della data aggiornata
 function parseSubitoDate(input) {
   const months = {
     gen: '01', feb: '02', mar: '03', apr: '04', mag: '05', giu: '06',
@@ -159,8 +158,9 @@ async function runScraper() {
             marca: parsedFeatures.marca || null,
             modello: parsedFeatures.modello || null,
             prezzo: prezzoParsed || null,
+            // LOGICA AGGIORNATA QUI
             anno: parsedFeatures.immatricolazione
-              ? parseInt(parsedFeatures.immatricolazione.replace(/\D/g, ''))
+              ? parseInt(parsedFeatures.immatricolazione.substring(parsedFeatures.immatricolazione.length - 4))
               : anno,
             km: parsedFeatures.km
               ? parseInt(parsedFeatures.km.replace(/\D/g, ''))
