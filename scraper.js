@@ -125,49 +125,114 @@ async function runScraper() {
           await detailPage.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
           logger.info(`✅ Pagina di dettaglio caricata: ${fullUrl}`);
 
-          const titolo = (await (await detailPage.$('h1'))?.textContent())?.trim();
-          const dataText = (await (await detailPage.$('span.index-module_insertion-date__MU4AZ'))?.textContent())?.trim();
+          // Estrazione dei campi principali
+          const titoloElement = await detailPage.$('h1');
+          const titolo = (await titoloElement?.textContent())?.trim();
+          logger.info(`Titolo: ${titolo || 'N/A'}`);
+
+          const descrizioneElement = await detailPage.$('p.AdDescription_description__154FP');
+          const descrizione = (await descrizioneElement?.textContent())?.trim();
+          logger.info(`Descrizione: ${descrizione ? descrizione.substring(0, 100) + '...' : 'N/A'}`);
+
+          const dataElement = await detailPage.$('span.index-module_insertion-date__MU4AZ');
+          const dataText = (await dataElement?.textContent())?.trim();
           const data_pubblicazione = parseSubitoDate(dataText);
-          const kilometriText = (await (await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz'))?.textContent())?.trim();
+          logger.info(`Data Inserzione: ${dataText || 'N/A'}`);
+
+          const kilometriElement = await detailPage.$('li:nth-of-type(6) span.feature-list_value__SZDpz');
+          const kilometriText = (await kilometriElement?.textContent())?.trim();
           const kilometri = kilometriText ? parseInt(kilometriText.replace(/\D/g, '')) : null;
-          const prezzoText = (await (await detailPage.$('p.AdInfo_price__flXgp'))?.textContent())?.trim();
+          logger.info(`Kilometri: ${kilometri || 'N/A'}`);
+
+          const comuneElement = await detailPage.$('p.AdInfo_locationText__rDhKP');
+          const comune = (await comuneElement?.textContent())?.trim();
+          logger.info(`Comune: ${comune || 'N/A'}`);
+
+          const prezzoElement = await detailPage.$('p.AdInfo_price__flXgp');
+          const prezzoText = (await prezzoElement?.textContent())?.trim();
           let prezzoParsed = null;
           if (prezzoText) {
-            const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
-            prezzoParsed = parseFloat(cleanedPrice);
+              const cleanedPrice = prezzoText.replace(/€|\s/g, '').replace(/\./g, '').replace(',', '.');
+              prezzoParsed = parseFloat(cleanedPrice);
           }
-          const annoText = (await (await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz'))?.textContent())?.trim();
-          const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null;
-          const likesText = (await (await detailPage.$('span.Heart_counter-wrapper__number__Xltfo'))?.textContent())?.trim();
+          logger.info(`Prezzo: ${prezzoParsed || 'N/A'}`);
 
+          const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
+          const nome_venditore = (await nomeElement?.textContent())?.trim(); // Rinominato per chiarezza nel record
+          logger.info(`Nome Venditore: ${nome_venditore || 'N/A'}`);
+
+          const annoElement = await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz');
+          const annoText = (await annoElement?.textContent())?.trim();
+          const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null; // Mantenuto per compatibilità, ma useremo parsedFeatures.immatricolazione
+          logger.info(`Anno: ${anno || 'N/A'}`);
+
+          const cilindrataElement = await detailPage.$('li:nth-of-type(4) span.feature-list_value__SZDpz');
+          const cilindrataText = (await cilindrataElement?.textContent())?.trim();
+          const cilindrata = cilindrataText ? parseInt(cilindrataText.replace(/\D/g, '')) : null;
+          logger.info(`Cilindrata: ${cilindrata || 'N/A'}`);
+
+          const likesElement = await detailPage.$('span.Heart_counter-wrapper__number__Xltfo');
+          const likes = (await likesElement?.textContent())?.trim();
+          logger.info(`Likes: ${likes || 'N/A'}`);
+
+          // --- LOGICA PER I "DATI PRINCIPALI" VARIABILI ---
+          logger.info("--- Estrazione Dati Principali (Marca, Modello, ecc.) ---");
           const mainDataSection = await detailPage.$('section.main-data');
+
           const parsedFeatures = {};
+
           if (mainDataSection) {
             const featureItems = await mainDataSection.$$('li.feature-list_feature__gAyqB');
             for (const item of featureItems) {
-              const label = (await (await item.$('span:first-child'))?.textContent())?.trim();
-              const value = (await (await item.$('span.feature-list_value__SZDpz'))?.textContent())?.trim();
+              const labelElement = await item.$('span:first-child');
+              const valueElement = await item.$('span.feature-list_value__SZDpz');
+
+              const label = (await labelElement?.textContent())?.trim();
+              const value = (await valueElement?.textContent())?.trim();
+
               if (label && value) {
                 const normalizedLabel = label.toLowerCase().replace(/\s/g, '');
                 parsedFeatures[normalizedLabel] = value;
               }
             }
+            logger.info("Dati Principali Parsed:", parsedFeatures);
+
+            logger.info(`Marca: ${parsedFeatures.marca || 'N/A'}`);
+            logger.info(`Modello: ${parsedFeatures.modello || 'N/A'}`);
+            logger.info(`Anno: ${parsedFeatures.immatricolazione || parsedFeatures.anno || 'N/A'}`);
+            logger.info(`Km: ${parsedFeatures.km || 'N/A'}`);
+            logger.info(`Cilindrata: ${parsedFeatures.cilindrata || 'N/A'}`);
+            logger.info(`Versione: ${parsedFeatures.versione || 'N/A'}`);
+            logger.info(`Tipo di veicolo: ${parsedFeatures.tipodiveicolo || 'N/A'}`);
+            logger.info(`Iva esposta: ${parsedFeatures.ivaesposta || 'N/A'}`);
+            logger.info(`Immatricolazione: ${parsedFeatures.immatricolazione || 'N/A'}`);
+
+          } else {
+            logger.warn("⚠️ Sezione 'main-data' non trovata o vuota.");
           }
 
+          // Prepara il record da inserire nella tabella Supabase
           const record = {
+            titolo: titolo || null,
+            descrizione: descrizione || null,
             marca: parsedFeatures.marca || null,
             modello: parsedFeatures.modello || null,
             prezzo: prezzoParsed || null,
-            // LOGICA AGGIORNATA QUI
             anno: parsedFeatures.immatricolazione
               ? parseInt(parsedFeatures.immatricolazione.substring(parsedFeatures.immatricolazione.length - 4))
-              : anno,
+              : (annoText ? parseInt(annoText.replace(/\D/g, '')) : null), // Fallback se 'immatricolazione' non è presente nelle features
             km: parsedFeatures.km
               ? parseInt(parsedFeatures.km.replace(/\D/g, ''))
               : kilometri,
-            likes: likesText ? parseInt(likesText.replace(/\D/g, '')) : null,
-            data_pubblicazione,
+            likes: likes ? parseInt(likes.replace(/\D/g, '')) : null,
+            data_pubblicazione, // Già parsata correttamente
             link_annuncio: fullUrl,
+            comune: comune || null,
+            nome_venditore: nome_venditore || null,
+            cilindrata: cilindrata || null, // Aggiunto il campo cilindrata
+            versione: parsedFeatures.versione || null, // Aggiunto il campo versione
+            tipo_veicolo: parsedFeatures.tipodiveicolo || null, // Aggiunto il campo tipo_veicolo
+            iva_esposta: parsedFeatures.ivaesposta === 'Sì', // Converti in booleano se "Sì"
             created_at: new Date().toISOString(),
           };
 
@@ -202,3 +267,4 @@ async function runScraper() {
 }
 
 runScraper().catch(err => logger.error('❌ Unhandled error: ' + err.message));
+```
