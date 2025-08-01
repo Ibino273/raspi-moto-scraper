@@ -158,12 +158,12 @@ async function runScraper() {
           logger.info(`Prezzo: ${prezzoParsed || 'N/A'}`);
 
           const nomeElement = await detailPage.$('.PrivateUserProfileBadge_small__lEJuK .headline-6 a');
-          const nome_venditore = (await nomeElement?.textContent())?.trim(); // Rinominato per chiarezza nel record
+          const nome_venditore = (await nomeElement?.textContent())?.trim();
           logger.info(`Nome Venditore: ${nome_venditore || 'N/A'}`);
 
           const annoElement = await detailPage.$('li:nth-of-type(7) span.feature-list_value__SZDpz');
           const annoText = (await annoElement?.textContent())?.trim();
-          const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null; // Mantenuto per compatibilità, ma useremo parsedFeatures.immatricolazione
+          const anno = annoText ? parseInt(annoText.replace(/\D/g, '')) : null;
           logger.info(`Anno: ${anno || 'N/A'}`);
 
           const cilindrataElement = await detailPage.$('li:nth-of-type(4) span.feature-list_value__SZDpz');
@@ -220,27 +220,37 @@ async function runScraper() {
             prezzo: prezzoParsed || null,
             anno: parsedFeatures.immatricolazione
               ? parseInt(parsedFeatures.immatricolazione.substring(parsedFeatures.immatricolazione.length - 4))
-              : (annoText ? parseInt(annoText.replace(/\D/g, '')) : null), // Fallback se 'immatricolazione' non è presente nelle features
+              : (annoText ? parseInt(annoText.replace(/\D/g, '')) : null),
             km: parsedFeatures.km
               ? parseInt(parsedFeatures.km.replace(/\D/g, ''))
               : kilometri,
             likes: likes ? parseInt(likes.replace(/\D/g, '')) : null,
-            data_pubblicazione, // Già parsata correttamente
+            data_pubblicazione,
             link_annuncio: fullUrl,
             comune: comune || null,
             nome_venditore: nome_venditore || null,
-            cilindrata: cilindrata || null, // Aggiunto il campo cilindrata
-            versione: parsedFeatures.versione || null, // Aggiunto il campo versione
-            tipo_veicolo: parsedFeatures.tipodiveicolo || null, // Aggiunto il campo tipo_veicolo
-            iva_esposta: parsedFeatures.ivaesposta === 'Sì', // Converti in booleano se "Sì"
+            cilindrata: cilindrata || null,
+            versione: parsedFeatures.versione || null,
+            tipo_veicolo: parsedFeatures.tipodiveicolo || null,
+            iva_esposta: parsedFeatures.ivaesposta === 'Sì',
             created_at: new Date().toISOString(),
           };
 
-          const { error: insertError } = await supabase.from('moto_listings').insert([record]);
+          // Salta l'annuncio se l'anno è null
+          if (record.anno === null) {
+            logger.warn(`⚠️ Anno di immatricolazione non trovato per l'annuncio: ${fullUrl}. Salto l'inserimento.`);
+            await detailPage.close();
+            continue;
+          }
+
+          // QUI DEVI SCEGLIERE QUALE TABELLA USARE
+          const TABLE_NAME = 'moto_listings'; // <--- MODIFICA QUI PER SCEGLIERE LA TABELLA (es. 'moto_listings2')
+
+          const { error: insertError } = await supabase.from(TABLE_NAME).insert([record]);
           if (insertError) {
-            logger.error(`❌ Errore inserimento Supabase: ${insertError.message}`);
+            logger.error(`❌ Errore inserimento Supabase nella tabella ${TABLE_NAME}: ${insertError.message}`);
           } else {
-            logger.info(`✅ Annuncio salvato su Supabase: ${fullUrl}`);
+            logger.info(`✅ Annuncio salvato su Supabase nella tabella ${TABLE_NAME}: ${fullUrl}`);
           }
 
         } catch (detailError) {
@@ -267,4 +277,3 @@ async function runScraper() {
 }
 
 runScraper().catch(err => logger.error('❌ Unhandled error: ' + err.message));
-```
